@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Persian OCR — از تصویر تا متن</title>
+<style>
+@page { size: A4; margin: 18mm 16mm 18mm 16mm; @bottom-center { content: counter(page); font-family: Tahoma, sans-serif; font-size: 9pt; color: #777; } }
+* { box-sizing: border-box; }
+body { font-family: Tahoma, "Segoe UI", sans-serif; font-size: 10.5pt; line-height: 1.85; color: #1d2329; margin: 0; }
+h1 { font-size: 20pt; color: #12415e; margin: 0 0 6mm; padding-bottom: 2mm; border-bottom: 3px solid #12415e; page-break-before: always; }
+h2 { font-size: 13.5pt; color: #12415e; margin: 7mm 0 2mm; break-after: avoid; }
+h3 { font-size: 11.5pt; color: #2b5d7c; margin: 5mm 0 1.5mm; break-after: avoid; }
+p { margin: 1.5mm 0 2.5mm; text-align: justify; }
+ul, ol { margin: 1mm 0 3mm; padding-inline-start: 7mm; }
+li { margin: 0.8mm 0; }
+.rtlc { font-family: Tahoma, sans-serif; font-size: 9pt; direction: rtl; unicode-bidi: embed; background: #eef2f5; padding: 0 1.2mm; border-radius: 3px; }
+code, .ltr { font-family: Consolas, monospace; font-size: 9pt; direction: ltr; unicode-bidi: embed; background: #eef2f5; padding: 0 1.2mm; border-radius: 3px; }
+pre { font-family: Consolas, Tahoma, monospace; font-size: 8.8pt; line-height: 1.6; background: #f4f6f8; border: 1px solid #d9e0e6; border-radius: 4px; padding: 3mm; white-space: pre-wrap; margin: 2mm 0 4mm; page-break-inside: avoid; }
+pre.rtl { direction: rtl; text-align: right; font-family: Tahoma, sans-serif; }
+pre.ltr-block { direction: ltr; text-align: left; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9.3pt; }
+tr { break-inside: avoid; }
+thead, tr:first-child { break-after: avoid; }
+th, td { border: 1px solid #c7d1da; padding: 1.4mm 2mm; text-align: right; vertical-align: top; }
+th { background: #e3ecf3; color: #12415e; }
+td.num, th.num { text-align: center; }
+figure { margin: 3mm 0 5mm; text-align: center; page-break-inside: avoid; }
+figure img { max-width: 100%; border: 1px solid #c7d1da; }
+figure.half img { max-width: 70%; }
+figcaption { font-size: 9pt; color: #555; margin-top: 1.5mm; }
+.box { border-radius: 4px; padding: 2.5mm 3.5mm; margin: 3mm 0 4mm; page-break-inside: avoid; }
+.key { background: #eaf4ec; border-right: 4px solid #2e8b57; }
+.warn { background: #fdf3e4; border-right: 4px solid #d98a1c; }
+.bad { background: #fbeaea; border-right: 4px solid #c0392b; }
+.info { background: #eaf1f8; border-right: 4px solid #2b6ca3; }
+.cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+.cover h1 { border: 0; page-break-before: avoid; font-size: 30pt; margin-bottom: 4mm; }
+.cover .sub { font-size: 15pt; color: #2b5d7c; margin-bottom: 14mm; }
+.cover .meta { font-size: 10.5pt; color: #555; line-height: 2.2; }
+.toc ol { list-style: none; padding: 0; }
+.toc li { border-bottom: 1px dotted #c7d1da; padding: 1mm 0; }
+.flow { margin: 3mm 0 5mm; }
+.step { break-inside: avoid; }
+.arrow { break-after: avoid; }
+.step { display: flex; align-items: stretch; margin: 0; }
+.step .n { flex: 0 0 9mm; background: #12415e; color: #fff; font-weight: bold; display: flex; align-items: center; justify-content: center; border-radius: 4px 0 0 4px; }
+.step .b { flex: 1; border: 1px solid #c7d1da; border-right: 0; padding: 1.5mm 3mm; background: #f8fafb; }
+.step .b b { color: #12415e; }
+.step .f { flex: 0 0 52mm; border: 1px solid #c7d1da; border-right: 0; padding: 1.5mm 2mm; font-family: Consolas, monospace; font-size: 8.3pt; direction: ltr; text-align: left; color: #2b5d7c; background: #fff; }
+.arrow { text-align: center; color: #8aa1b3; line-height: 1.1; font-size: 11pt; }
+.two { display: flex; gap: 4mm; break-inside: avoid; }
+.two > div { flex: 1; }
+.small { font-size: 9pt; color: #555; }
+.ok { color: #2e8b57; font-weight: bold; }
+.no { color: #c0392b; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<section class="cover">
+<h1>Persian OCR</h1>
+<div class="sub">از تصویر تا متن: منطق، ورک‌فلو و همه‌ی پردازش‌ها</div>
+<div class="meta">
+OCR فارسی اسناد ساخت‌دار سازمانی، روی CPU و بدون فاین‌تیون<br>
+مدل پایه: Indra OCR · کد: <span class="ltr">persian_ocr</span> نسخه‌ی 0.2.0<br>
+تاریخ: ۲۰۲۶-۱۱-۱۰<br>
+همه‌ی تصویرها و خروجی‌های این سند از اجرای واقعی همین کد گرفته شده‌اند.<br>نمونه‌ها دو فاکتور <b>مصنوعی</b> هستند؛ هیچ سند واقعی سازمان در این سند نیست.
+</div>
+</section>
+
+<h1>فهرست</h1>
+<div class="toc">
+<ol>
+<li>۱. پروژه در یک صفحه</li>
+<li>۲. ورک‌فلو کامل: از فایل تا خروجی</li>
+<li>۳. مرحله‌به‌مرحله روی یک فاکتور نمونه</li>
+<li>۴. جدول: از خطوط خط‌کشی تا سلول‌ها</li>
+<li>۵. فاکتور: ستون‌ها، معادلات و اصلاح</li>
+<li>۶. قواعد متنی: نرمال‌سازی، checksum، تاریخ و دیکشنری</li>
+<li>۷. ساخت متن نهایی و خروجی‌ها</li>
+<li>۸. راه‌های استفاده: خط فرمان، کد پایتون و API</li>
+<li>۹. ارزیابی و نتیجه‌ها</li>
+<li>۱۰. آنچه در اجرای همین سند دیده شد (نقاط ضعف واقعی)</li>
+<li>۱۱. محدودیت‌ها و قدم‌های بعدی</li>
+<li>پیوست: تنظیمات، متغیرهای محیطی و نقشه‌ی فایل‌ها</li>
+</ol>
+</div>
+
+<h1>۱. پروژه در یک صفحه</h1>
+
+<p>این پروژه متن، جدول و فیلدهای مهم (کد ملی، شناسه ملی، شبا، کدپستی، مبلغ، تاریخ) را از اسکن‌ها و PDFهای فارسی بیرون می‌کشد.
+خواندن حروف را مدل آماده‌ی <b>Indra OCR</b> انجام می‌دهد؛ کار این پروژه همه‌ی چیزهایی است که <b>دور</b> مدل ساخته شده:
+آماده‌سازی تصویر، تکه‌کردن صفحه، بازسازی جدول، و قواعدی که خروجی را با منطق خود سند می‌سنجند.</p>
+
+<div class="box key">
+<b>سه اصل پروژه</b>
+<ul>
+<li><b>فقط CPU و بدون آموزش مدل.</b> دقت با مهندسی تصویر و قواعد تعیینی بالا می‌رود، نه با fine-tuning.</li>
+<li><b>حدس نزن.</b> عدد یا شناسه فقط وقتی خودکار اصلاح می‌شود که اصلاح <b>یکتا و قطعی</b> باشد. وگرنه به «صف مرور انسانی» می‌رود.</li>
+<li><b>از خود سند استفاده کن.</b> checksum شناسه‌ها، معادلات ریاضی فاکتور (<span class="ltr">qty × price = amount</span>) و ساختار جدول، «ground truth رایگان» هستند.</li>
+</ul>
+</div>
+
+<h2>ورودی و خروجی</h2>
+<table>
+<tr><th style="width:22%">ورودی</th><td>PDF (چندصفحه‌ای) یا تصویر تک‌صفحه‌ای: png، jpg، bmp، tif، webp</td></tr>
+<tr><th>خروجی متن</th><td><span class="ltr">.txt</span>: متن کامل و مرتب هر صفحه؛ جدول به صورت ردیف‌های markdown در جای خودش</td></tr>
+<tr><th>خروجی ساختاریافته</th><td><span class="ltr">.json</span>: متن خام و اصلاح‌شده، اصلاح‌های خودکار، صف مرور، خطوط کم‌اطمینان، جدول‌ها، فاکتور (اقلام، جمع‌ها، طرفین، نتیجه‌ی هر معادله)</td></tr>
+<tr><th>گزارش مرور</th><td><span class="ltr">.html</span>: تصویر هر صفحه کنار متن؛ اصلاح‌ها سبز، موارد مشکوک نارنجی، خطوط کم‌اطمینان قرمز</td></tr>
+<tr><th>سرعت</th><td>۲ تا ۵ ثانیه برای هر صفحه روی CPU با ۴ ریسه (صفحه‌های پرجدول کندترند)</td></tr>
+</table>
+
+<h2>اجزای اصلی</h2>
+<table>
+<tr><th style="width:22%">بخش</th><th>کار</th></tr>
+<tr><td><span class="ltr">pdfio</span></td><td>خواندن PDF/تصویر و رندر هر صفحه به تصویر خاکستری ۳۰۰ dpi</td></tr>
+<tr><td><span class="ltr">orientation</span></td><td>پیدا کردن جهت درست صفحه با امتحان هر ۴ چرخش، و رفع کجی</td></tr>
+<tr><td><span class="ltr">engine</span></td><td>بارگذاری مدل‌های ONNX ایندرا و «Force-RTL»</td></tr>
+<tr><td><span class="ltr">tiling</span>، <span class="ltr">vision/</span></td><td>دو تایل هم‌پوشان؛ حذف واترمارک سربرگ؛ بازیابی پاورقی کم‌رنگ؛ باز کردن مهر دایره‌ای</td></tr>
+<tr><td><span class="ltr">tables/</span></td><td>پیدا کردن سلول‌های جدول خط‌دار و خواندن سلول‌به‌سلول (حتی سرستون تیره)</td></tr>
+<tr><td><span class="ltr">invoice/</span></td><td>نگاشت ستون‌ها، معادلات ردیف و جمع، طرفین معامله، اصلاح یکتا</td></tr>
+<tr><td><span class="ltr">text/</span></td><td>نرمال‌سازی، checksum شناسه‌ها، تاریخ جلالی، معادله‌ی سرمایه، دیکشنری سازمان</td></tr>
+<tr><td><span class="ltr">pipeline</span></td><td>کنار هم گذاشتن همه‌ی مراحل و ساخت متن نهایی</td></tr>
+<tr><td><span class="ltr">report/</span>، <span class="ltr">api/</span>، <span class="ltr">cli</span></td><td>نوشتن خروجی‌ها؛ سرویس HTTP با Swagger؛ خط فرمان</td></tr>
+<tr><td><span class="ltr">evaluation/</span></td><td>سنجش دقت روی اسناد دارای متن درست، مقایسه با مدل‌های دیگر، داشبورد و گالری خطا</td></tr>
+</table>
+
+<h1>۲. ورک‌فلو کامل: از فایل تا خروجی</h1>
+
+<p>هر سند صفحه‌به‌صفحه از این مراحل می‌گذرد. ستون چپ نام تابع اصلی هر مرحله است.</p>
+
+<div class="flow">
+<div class="step"><div class="n">۱</div><div class="b"><b>خواندن ورودی:</b> هر صفحه‌ی PDF با ۳۰۰ dpi رندر و خاکستری می‌شود؛ تصویر مستقیم خوانده می‌شود.</div><div class="f">pdfio.iter_gray_pages</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۲</div><div class="b"><b>جهت‌یابی و رفع کجی:</b> هر ۴ چرخش امتحان و بهترین انتخاب می‌شود؛ کجی جزئی صاف می‌شود.</div><div class="f">orientation.robust_upright</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۳</div><div class="b"><b>Force-RTL:</b> از این‌جا همه‌ی خطوط به recognizer راست‌به‌چپ فرستاده می‌شوند.</div><div class="f">engine.force_rtl</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۴</div><div class="b"><b>تشخیص و خواندن خطوط در دو تایل:</b> نیمه‌ی بالا و پایین با ۱۸٪ هم‌پوشانی جدا خوانده می‌شوند.</div><div class="f">pipeline._recognize_lines</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۵</div><div class="b"><b>بهبودهای تصویری:</b> سربرگ بدون واترمارک دوباره خوانده می‌شود؛ پاورقی کم‌رنگ پنجره‌به‌پنجره؛ مهر دایره‌ای باز و خوانده می‌شود.</div><div class="f">vision.*</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۶</div><div class="b"><b>ادغام:</b> خطوط تکراری دو تایل و پاس‌های اضافه یکی می‌شوند (خط با اطمینان بالاتر می‌ماند) و از بالا به پایین، راست به چپ مرتب می‌شوند.</div><div class="f">tiling.merge_tiles</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۷</div><div class="b"><b>جدول:</b> سلول‌ها از خطوط خط‌کشی پیدا و هر سلول جدا خوانده می‌شود.</div><div class="f">tables.extract_tables</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۸</div><div class="b"><b>فاکتور:</b> اگر جدول سرستون اقلام دارد، ستون‌ها نگاشت و معادلات هر ردیف و جمع‌ها بررسی می‌شوند.</div><div class="f">invoice.parse_invoice</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۹</div><div class="b"><b>قواعد متنی:</b> نرمال‌سازی، checksum کد/شناسه ملی، تاریخ، معادله‌ی سرمایه، (اختیاری) دیکشنری سازمان.</div><div class="f">text.postprocess_text</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۱۰</div><div class="b"><b>متن نهایی صفحه:</b> خطوط بیرون جدول و ردیف‌های جدول به ترتیب عمودی، هر چیز یک بار.</div><div class="f">pipeline._compose_text</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۱۱</div><div class="b"><b>سطح کل سند:</b> برای فاکتور چندصفحه‌ای، رأی‌گیری سربرگ و بررسی جمع‌ها روی همه‌ی صفحه‌ها.</div><div class="f">invoice.reconcile_document</div></div>
+<div class="arrow">▼</div>
+<div class="step"><div class="n">۱۲</div><div class="b"><b>خروجی:</b> فایل‌های txt، json و html با نام فایل ورودی.</div><div class="f">report.write_outputs</div></div>
+</div>
+
+<div class="box info">
+مراحل ۲ تا ۹ فقط در حالت «مهندسی‌شده» (<span class="ltr">engineered=True</span>، پیش‌فرض) اجرا می‌شوند. حالت «خط پایه»
+(<span class="ltr">PipelineConfig.baseline</span>) همان Indra خام است و فقط برای مقایسه در ارزیابی استفاده می‌شود.
+</div>
+
+<h2>واحد داده: «خط»</h2>
+<p>خروجی مدل برای هر خط سه چیز است: <span class="ltr">box</span> (مختصات x0، y0، x1، y1 روی تصویر)، <span class="ltr">text</span> و
+<span class="ltr">conf</span> (اطمینان بین ۰ و ۱). همه‌ی مراحل بعدی روی همین خط‌ها کار می‌کنند: ادغام با هم‌پوشانی جعبه‌ها،
+تخصیص به سلول جدول با مرکز جعبه، و علامت «کم‌اطمینان» برای <span class="ltr">conf &lt; 0.75</span>.</p>
+
+<h1>۳. مرحله‌به‌مرحله روی یک فاکتور نمونه</h1>
+
+<p>ورودی این بخش <b>فاکتور نمونه‌ی الف</b> است (<span class="ltr">samples/invoice-sample.png</span>، ۱۷۶۰ × ۲۵۰۰ پیکسل):
+یک فاکتور فروش <b>مصنوعی</b> که مثل اسکن‌های واقعی ۹۰ درجه چرخیده روی صفحه‌ی عمودی افتاده است. زیر سربرگش لوگوی خاکستری (واترمارک) هست،
+سرستون جدولش تیره است، پاورقی کم‌رنگ دارد و یک مهر دایره‌ای. همه‌ی نام‌ها، شماره‌ها و شناسه‌ها ساختگی‌اند (شناسه‌ها checksum معتبر دارند).
+رندر تمیز است، پس از اسکن واقعی <b>آسان‌تر</b> است؛ ضعف‌های دیده‌شده روی اسکن واقعی بیشترند.</p>
+
+<figure class="half"><img src="img/01_input.png"><figcaption>شکل ۱. تصویر ورودی (۹۰ درجه چرخیده)</figcaption></figure>
+
+<h2>۳.۱ خواندن و خاکستری کردن — <span class="ltr">pdfio.py</span></h2>
+<ul>
+<li>PDF با کتابخانه‌ی pdfium و مقیاس <span class="ltr">dpi / 72</span> رندر می‌شود (پیش‌فرض ۳۰۰ dpi). تصویر مستقیم خوانده می‌شود.</li>
+<li>همه‌چیز به تصویر خاکستری تبدیل می‌شود؛ مدل روی خاکستری کار می‌کند.</li>
+<li>فایل با <span class="ltr">np.fromfile</span> خوانده می‌شود چون <span class="ltr">cv2.imread</span> روی مسیرهای فارسی ویندوز شکست می‌خورد.</li>
+<li>از TIFF چندصفحه‌ای فقط صفحه‌ی اول خوانده می‌شود.</li>
+</ul>
+
+<h2>۳.۲ جهت‌یابی — <span class="ltr">orientation.py</span></h2>
+<p><b>مشکل:</b> فاکتورهای افقی روی کاغذ عمودی چاپ می‌شوند (۶ از ۷ فاکتور اولیه). مدل جهت‌یابی خود ایندرا روی چند صفحه‌ی صاف، آن را وارونه کرد.</p>
+<p><b>راه‌حل:</b> صفحه در هر ۴ چرخش (۰، ۹۰، ۱۸۰، ۲۷۰ درجه) با نصف اندازه بررسی می‌شود. در هر چرخش خطوط تشخیص داده می‌شوند؛
+خطی «افقی» است که عرضش بیش از ۲ برابر ارتفاعش باشد؛ ۱۲ خط افقیِ پهن‌تر خوانده می‌شوند و</p>
+<pre class="ltr-block">score = (share of horizontal lines) × (mean recognition confidence)</pre>
+<p>چرخش با بیشترین امتیاز برنده است، سپس کجی جزئی با <span class="ltr">ort.upright</span> صاف می‌شود.</p>
+
+<figure><img src="img/02_orientation.png"><figcaption>شکل ۲. چهار چرخش (از چپ به راست: ۰، ۹۰، ۱۸۰، ۲۷۰ بار چرخش ۹۰ درجه‌ای)؛ سبز = انتخاب‌شده. امتیازها در این تصویر:
+<span class="ltr">0 | 0.802 | 0 | 0.39</span> . کجی: <span class="ltr">0</span>.</figcaption></figure>
+
+<p class="small">هزینه در این نمونه: <span class="ltr">0.82</span> ثانیه. در صفحه‌ی وارونه (چرخش چهارم) مدل هنوز چیزهایی می‌خواند ولی با اطمینان کمتر؛ به همین دلیل امتیازش <span class="ltr">0.39</span> است نه صفر.
+روی همین نمونه Indra خام هم صفحه‌ی چرخیده را درست خواند (خروجی خام روی صفحه‌ی چرخیده و صاف دقیقاً یکی بود)؛ پس این مرحله اینجا فقط تضمین است، نه نجات‌دهنده.</p>
+
+<h2>۳.۳ Force-RTL — <span class="ltr">engine.py</span></h2>
+<p>ایندرا با مدل <span class="ltr">script.onnx</span> برای هر خط تصمیم می‌گیرد کدام recognizer (لاتین، راست‌به‌چپ، CJK) آن را بخواند.
+روی اسناد فارسی واقعی (نامه‌ها)، سطرهای کوتاه تاریخ و سطرهای دوزبانه به مدل لاتین می‌رفتند و یک تاریخ جلالی به رشته‌ای مثل
+<span class="ltr">18-1/11/14</span> تبدیل می‌شد؛ کدپستی هم به حروف لاتین بی‌معنی. در حالت مهندسی‌شده این تصمیم موقتاً با «همه راست‌به‌چپ» جایگزین می‌شود.
+recognizer راست‌به‌چپ ارقام و حروف لاتین را هم می‌خواند.</p>
+
+<h2>۳.۴ دو تایل هم‌پوشان — <span class="ltr">tiling.py</span></h2>
+<p>مدل هر تصویر را قبل از تشخیص کوچک می‌کند؛ روی صفحه‌ی کامل، متن ریز گم می‌شود. پس صفحه به دو نیمه شکسته می‌شود که
+<b>۱۸٪ ارتفاع</b> با هم هم‌پوشانی دارند تا خطی که روی مرز است حداقل در یک تایل کامل باشد.</p>
+<figure><img src="img/03_tiles.png"><figcaption>شکل ۳. تایل بالا تا خط قرمز (۰ تا ۱۰۳۸)، تایل پایین از خط آبی (۷۲۱ تا ۱۷۶۰). نوار زرد = ناحیه‌ی هم‌پوشان (۳۱۷ پیکسل).</figcaption></figure>
+
+<h2>۳.۵ حذف واترمارک سربرگ — <span class="ltr">vision/watermark.py</span></h2>
+<p><b>مشکل دیده‌شده:</b> در اسناد واقعی، شماره ثبت روی لوگوی خاکستری پس‌زمینه‌ی سربرگ چاپ می‌شد و رقم‌هایش غلط خوانده می‌شد.
+در همین نمونه هم شماره ثبت روی واترمارک است: Indra خام آن را <span class="ltr">۱۲۲۴۵۶</span> خواند (چاپی: <span class="ltr">۱۲۳۴۵۶</span>)
+و شناسه ملی فروشنده را <span class="ltr">۱۰۹۰۱۲۳۴۵۶۳</span> (چاپی: <span class="ltr">۱۰۹۰۱۲۳۴۵۶۲</span>، با checksum نامعتبر).
+خروجی نهایی هر دو را درست دارد. سهم این پاس به‌تنهایی جدا سنجیده نشده؛ تایل‌ها و خواندن سلول هم در آن نقش دارند.</p>
+<p><b>راه‌حل:</b> روی ۳۰٪ بالای صفحه، هر پیکسل روشن‌تر از ۱۳۵ سفید می‌شود، یک blur ملایم ۳×۳ می‌خورد و یک پاس OCR دیگر انجام می‌شود.
+اگر خطی در هر دو پاس آمد، نسخه‌ی با اطمینان بالاتر می‌ماند.</p>
+<figure><img src="img/04_watermark.png"><figcaption>شکل ۴. بالا: سربرگ اصلی؛ پایین: بعد از حذف خاکستری‌ها (۳۰٪ بالای صفحه). واترمارک کامل از بین رفته و متن مشکی دست‌نخورده است.
+در اسناد واقعی گاهی متن خاکستریِ واقعی هم همراه واترمارک کم‌رنگ می‌شود؛ برای همین این پاس <b>اضافه</b> است و جایگزین پاس اصلی نمی‌شود.</figcaption></figure>
+
+<h2>۳.۶ پاورقی کم‌رنگ و مهر دایره‌ای — <span class="ltr">vision/footer.py</span>، <span class="ltr">stamps.py</span></h2>
+<ul>
+<li><b>پاورقی:</b> در ۱۰٪ پایین صفحه، سطرهای خیلی عریض (≥ ۳۵٪ عرض صفحه) به پنجره‌های افقی شکسته می‌شوند و ارتفاع هر پنجره «تنگ» می‌شود. علت: در سطر ۱۵۰۰ پیکسلی، کجی جزئی ارتفاع جعبه را ۲ برابر می‌کرد و بعد از کوچک‌سازی، ارقام ناخوانا می‌شدند. هر پنجره با اطمینان ≥ ۰٫۴۸ نگه داشته می‌شود.</li>
+<li><b>مهر دایره‌ای:</b> در ۶۵٪ پایین صفحه، دایره با HoughCircles (شعاع ۱۳۰ تا ۲۳۰ پیکسل) پیدا می‌شود. حلقه‌ی متن با <span class="ltr">warpPolar</span> به یک نوار افقی تبدیل و با پنجره‌ی لغزان خوانده می‌شود. خروجی به شکل <span class="rtlc">[مهر دایره‌ای: ...]</span> به متن اضافه می‌شود.</li>
+</ul>
+<figure><img src="img/07_footer.png"><figcaption>شکل ۵. نوار ۱۰٪ پایین صفحه؛ کادر نارنجی = سطر پاورقی که پنجره‌پنجره خوانده شد.</figcaption></figure>
+<figure class="half"><img src="img/08_stamp.png"><figcaption>شکل ۶. مهر دایره‌ای: دایره‌ای که پیدا شد (مرکز ۳۵۸، ۱۴۴۳؛ شعاع ۱۷۳ پیکسل) و نوار بازشده‌ی حلقه‌ی متن (بخشی از آن).</figcaption></figure>
+<p><b>نتیجه‌ی واقعی در این نمونه:</b></p>
+<ul>
+<li><b>پاورقی:</b> پاس پنجره‌ای یک سطر با ۱۲ تکه‌ی هم‌پوشان ساخت که در عمل تکه‌های درهم است. ولی خود سطر پاورقی در این رندر تمیز مستقیم و با اطمینان <span class="ltr">0.835</span> خوانده شده بود و همان در متن نهایی ماند. ارزش این پاس در پاورقی‌های واقعاً کم‌رنگ است، که این نمونه ندارد. ترتیب بخش‌های تلفن هم برعکس شد (چاپی <span class="ltr">۰۲۱-۵۵۵۰۱۲۳۴</span>، خوانده‌شده <span class="ltr">۵۵۵۰۱۲۳۴-۰۲۱</span>).</li>
+<li><b>مهر:</b> دایره پیدا شد و حلقه خوانده شد: <span class="rtlc">[مهر دایره‌ای: شرکت ارمان تجارت]</span> (حلقه‌ی چاپی: «شرکت آرمان تجارت نمونه ★ مهر مجاز فروش ★ تهران»؛ فقط ابتدای متن آمد و «آرمان» ← «ارمان»). <b>این خط در متن نهایی نیامد</b>؛ احتمالاً چون در ادغام با خط «مهر شرکت» وسط مهر (اطمینان <span class="ltr">0.968</span> در برابر <span class="ltr">0.78</span>) یکی شد و آن برد. این علت را جدا آزمایش نکرده‌ام.</li>
+</ul>
+
+<h2>۳.۷ تشخیص و خواندن خطوط</h2>
+<figure class="two">
+<div><img src="img/05_detect.png"><figcaption>شکل ۷. خروجی detector روی کل صفحه: ۶۴ جعبه.</figcaption></div>
+<div><img src="img/06_lines.png"><figcaption>شکل ۸. خطوط نهایی بعد از تایل‌ها و ادغام (۶۰ خط؛ سبز = اطمینان ≥ ۰٫۷۵، قرمز = کمتر).</figcaption></div>
+</figure>
+
+<p>گزیده‌ای از خطوط خوانده‌شده (خام، قبل از پس‌پردازش؛ به همین ترتیب از بالا):</p>
+<table>
+<tr><th class="num" style="width:12%">اطمینان</th><th>متن خوانده‌شده</th></tr>
+<tr><td class="num">0.957</td><td>صورتجشاب فروش کالا و خدمات <span class="small">(«حساب» ← «جشاب»؛ بخش ۱۰)</span></td></tr>
+<tr><td class="num">0.942</td><td>شماره سریال: ۳۱۸۷</td></tr>
+<tr><td class="num">0.896</td><td>شماره ثبت: ۱۲۳۴۵۶</td></tr>
+<tr><td class="num">0.934</td><td>تاریخ: ۱۴۰۵/۰۸/۱۹</td></tr>
+<tr><td class="num">0.976</td><td>نام: شرکت آرمان تجارت نمونه</td></tr>
+<tr><td class="num">0.854</td><td>شماره اقتصادی: ۱۰۹۰۱۲۳۴۵۶۲</td></tr>
+<tr><td class="num">0.900</td><td>شناسه ملی: ۱۰۹۰۱۲۳۴۵۶۲</td></tr>
+<tr><td class="num">0.894</td><td>کدیستی: ۱۵۹۳۶۱۳۴۹۲ <span class="small">(«کدپستی» ← «کدیستی»؛ بخش ۱۰)</span></td></tr>
+<tr><td class="num">0.902</td><td>شماره اقتصادی: ۱۰۹۰۷۶۶۵۴۳۴</td></tr>
+<tr><td class="num">0.802</td><td>کدیستی: ۱۵۳۱۷۴۵۳۱۶</td></tr>
+<tr><td class="num">0.646</td><td>۱۲,۵۰۰,0۰۰ <span class="small">(صفر لاتین وسط ارقام فارسی؛ اطمینان کم)</span></td></tr>
+<tr><td class="num">0.560</td><td>۰,۰۰۰,۰۰۰ <span class="small">(باید «۰» باشد (تخفیف ردیف ۱)؛ اطمینان کم)</span></td></tr>
+<tr><td class="num">0.875</td><td>٢٣,٠٠٠,٠٠٠ <span class="small">(باید ۳۳٬۰۰۰٬۰۰۰ باشد (۳ ← ۲)؛ بخش ۱۰)</span></td></tr>
+<tr><td class="num">0.968</td><td>مهر شرکت</td></tr>
+<tr><td class="num">0.835</td><td>نشانی: تهران، خیابان نمونه، کوچه آزمایش، پلاک ۱۲ — کدپستی: ۱۵۹۳۶۱۳۴۹۲ — تلفن: ۵۵۵۰۱۲۳۴-۰۲۱</td></tr>
+</table>
+<p class="small">خطای «حساب ← جشاب» و «کدپستی ← کدیستی» را بعداً به‌طور مستقیم می‌بینید؛ هر دو اطمینان بالا دارند. اطمینان بالا یعنی درست بودن را تضمین نمی‌کند.</p>
+
+<h2>۳.۸ ادغام خطوط — <span class="ltr">tiling.merge_lines</span></h2>
+<p>خطوط تایل پایین، پاس واترمارک، پاورقی و مهر، روی خطوط موجود ادغام می‌شوند. دو خط «یکی» هستند اگر:</p>
+<pre class="ltr-block">IoU(box1, box2) > 0.20
+  OR  (vertical overlap > 55% of the shorter height  AND  horizontal overlap > 50% of the narrower width)</pre>
+<p>از دو خط یکی، آن‌که اطمینان بیشتری دارد می‌ماند. در پایان خطوط بر اساس y (گرد شده به ۳۰ پیکسل، تا خطوط هم‌ردیف کنار هم بمانند) و بعد از راست به چپ مرتب می‌شوند.
+همین قاعده است که خط مهر را کنار می‌زند (بخش ۳.۶).</p>
+
+<h2>۳.۹ نتیجه: مهندسی‌شده در برابر Indra خام</h2>
+<div class="two">
+<div>
+<b>Indra خام</b>
+<pre class="rtl">صورتجشاب فروش کالا و خدمات
+شماره سریال: ۳۱۸۷
+شماره ثبت: ۱۲۲۴۵۶
+تاریخ: ۱۴۰۵/۰۸/۱۹
+مشخصات فروشنده
+نام: شرکت آرمان تجارت نمونه
+شماره اقتصادی: ۱۰۹۰۱۲۳۴۵۶۲
+شناسه ملی: ۱۰۹۰۱۲۳۴۵۶۳
+کدیستی: ۱۵۹۳۶۱۳۴۹۲
+...
+C1.1
+سرور رکمونت نمونه
+f
+11,0
+00,,
+Y
+CITY.
+کابل شبکه ۱۰۰ متری
+1.
+T. T., 
+Y</pre>
+</div>
+<div>
+<b>این پروژه (<span class="ltr">text_dedup</span>)</b>
+<pre class="rtl">صورتجشاب فروش کالا و خدمات
+شماره سریال: 3187
+شماره ثبت: 123456
+| نام: شرکت آرمان تجارت نمونه | شماره اقتصادی: ۱۰۹۰۱۳۳۴۵۶۲ | شناسه ملی: ۱۰۹۰۱۲۳۴۵۶۲ | کدیستی: ۱۵۹۲۶۱۳۴۹۲ |
+...
+| ۱ | C۱٠٢۱ | سرور رکمونت نمونه | ۴ | ١٢,۵٠٠,٠٠٠ | ٥٠,٠٠٠,٠٠٠ | ٥٠,٠٠٠,٠٠٠ | ۵,٠٠٠,٠٠٠ | ۵۵,۰۰۰,۰۰۰ |
+| C۲۲۱۰ | کابل شبکه ۱۰۰ متری | ۱۰ | ٢,٢٠٠,٠٠٠ | ٢٢,٠٠٠,٠٠٠ | ٢,٠٠٠,٠٠٠ | ٣٠,٠٠٠,٠٠٠ | ٣,٠٠٠,٠٠٠ | ٢٣,٠٠٠,٠٠٠ |
+2
+| S۳۰۰۵ | خدمات نصب و راه اندازی | ۲ | ۴٨,٠٠٠,٠٠٠ | ٩۶,٠٠٠,٠٠٠ | ۶,٠٠٠,٠٠٠ | ٩٠,٠٠٠,٠٠٠ | ٩,٠٠٠,٠٠٠ | ٩٩,٠٠٠,٠٠٠ |</pre>
+</div>
+</div>
+<div class="box key">
+<b>تفاوت اصلی:</b> Indra خام سلول‌های جدول را تکه‌تکه و ناخوانا می‌دهد (<span class="ltr">11,0 / 00,, / CITY.</span>) و ارتباط ردیف و ستون از بین می‌رود؛
+در این پروژه هر ردیف یک خط markdown است و ارقام خوانده می‌شوند. شماره ثبت و شناسه ملی که در خروجی خام غلط بودند، در خروجی نهایی درست‌اند.
+ولی خروجی این پروژه هم خطای خودش را دارد (بخش ۱۰): همین جدول ارقام «۳» را در چند سلول «۲» خوانده است.
+</div>
+
+<h1>۴. جدول: از خطوط خط‌کشی تا سلول‌ها</h1>
+
+<p>Indra خطوط را بدون رابطه‌ی سطر و ستون می‌دهد؛ معلوم نیست کدام عدد «فی» است و کدام «مبلغ». برای همین جدول جداگانه بازسازی می‌شود.
+برای نشان دادن این بخش از <b>فاکتور نمونه‌ی ب</b> استفاده می‌شود: یک فاکتور مصنوعی دیگر (همه‌ی نام‌ها و شناسه‌ها ساختگی‌اند) با جدول خط‌دار و سرستون تیره.
+دو خطا عمداً در آن چاپ شده: مبلغ کل ردیف ۱ (<span class="ltr">۲۵۰٬۰۰۰٬۰۰۰</span> به جای <span class="ltr">۵ × ۷۰٬۰۰۰٬۰۰۰ = ۳۵۰٬۰۰۰٬۰۰۰</span>)
+و یک رقم شناسه ملی فروشنده (<span class="ltr">۱۰۸۶۵۴<b>۸</b>۲۱۷۳</span> به جای <span class="ltr">۱۰۸۶۵۴<b>۳</b>۲۱۷۳</span>).</p>
+
+<figure><img src="img/10_invoice.png"><figcaption>شکل ۹. فاکتور نمونه‌ی ب (۳۲۰۰ × ۱۶۶۰ پیکسل).</figcaption></figure>
+
+<h2>۴.۱ پیدا کردن سلول‌ها — <span class="ltr">tables/cells.py</span></h2>
+<ol>
+<li><b>آستانه‌گذاری تطبیقی</b> (بلوک ۲۵ پیکسل): جوهر سفید، زمینه سیاه.</li>
+<li><b>خطوط افقی</b> با عملگر morphology «open» و هسته‌ای به عرض <span class="ltr">max(40, W/35)</span>؛ <b>خطوط عمودی</b> با هسته‌ای به ارتفاع <span class="ltr">max(30, H/70)</span>. حروف از این هسته‌ها کوتاه‌ترند و حذف می‌شوند؛ فقط خط‌کشی می‌ماند.</li>
+<li>خطوط کمی ضخیم می‌شوند تا شکاف‌های اسکن بسته شود.</li>
+<li>هر ناحیه‌ی بسته بین خط‌کشی‌ها یک <b>سلول کاندید</b> است. رد می‌شود اگر کوچک‌تر از ۴۰×۲۸ پیکسل، تمام‌صفحه یا نامنظم باشد.</li>
+<li>کمتر از ۶ سلول یعنی «جدولی نیست».</li>
+<li>سلول‌ها با مرکز عمودی‌شان در ردیف‌ها گروه و هر ردیف از راست به چپ مرتب می‌شود.</li>
+</ol>
+<figure><img src="img/11_invoice_cells.png"><figcaption>شکل ۱۰. ۳۸ سلول در ۹ ردیف پیدا شد؛ بنفش = ۸ سلول تیره‌ی سرستون، سبز = سلول عادی.</figcaption></figure>
+
+<h2>۴.۲ سلول تیره — <span class="ltr">tables/dark.py</span></h2>
+<p>سلولی که میانه‌ی روشنایی‌اش زیر ۱۵۰ باشد «تیره» است (سرستون هاف‌تون). این سلول‌ها:</p>
+<ul>
+<li>در یک کپی از صفحه سفید می‌شوند تا detector صفحه گیج نشود؛</li>
+<li>جداگانه در <b>دو نسخه</b> خوانده می‌شوند: «متن تیره روی زمینه‌ی تیره» (کشش کنتراست) و «متن روشن» (وارون)؛ نسخه‌ی با اطمینان بیشتر برنده است.</li>
+</ul>
+<figure class="half"><img src="img/09_dark_variants.png"><figcaption>شکل ۱۱. سرستون تیره‌ی «خالص فاکتور» در فاکتور الف، از چپ: اصلی، نسخه‌ی کشیده‌ی کنتراست (زمینه‌ی تقریباً سیاه و متن سفید) و نسخه‌ی وارون (متن سیاه روی زمینه‌ی سفید).</figcaption></figure>
+
+<h2>۴.۳ خواندن سلول‌ها — <span class="ltr">tables/lines.py</span>، <span class="ltr">extract.py</span></h2>
+<ol>
+<li>تشخیص خطوط <b>یک بار</b> روی کل صفحه انجام می‌شود (نه برای هر سلول؛ سریع‌تر است).</li>
+<li>هر خط به سلولی می‌رود که مرکز عمودی‌اش در آن است و با مرز داخلی سلول بریده می‌شود تا خط‌کشی جزو متن نشود.</li>
+<li>سلولی که detector در آن خطی ندید ولی جوهر دارد (بیش از ۱۵ پیکسل)، کل ناحیه‌ی جوهرش یک خط فرض می‌شود. این برای رقم تکِ «۱» است که فقط چند ده پیکسل جوهر دارد.</li>
+<li>همه‌ی برش‌ها یکجا (batch) به recognizer می‌روند؛ حدود ۰٫۴ ثانیه برای هر صفحه.</li>
+</ol>
+
+<p>جدولی که از فاکتور نمونه‌ی ب بازسازی شد (عین خروجی):</p>
+<pre class="rtl">| ردیف | شرح کالا | تعداد | مبلع واحد | مبلع كل | مبلع کل پس از تخفیف | حمع مالیات و عوارض | خالص فاكتور |
+| ۱ | خدمات مشاوره فنی | ۵ | ٧٠,٠٠٠,٠٠٠ | ٢٥٠,٠٠٠,٠٠٠ | ٣٥٠,٠٠٠,٠٠٠ | ٣۵,٠٠٠,٠٠٠ | ٣٨۵,٠٠٠,٠٠٠ |
+| r | لایسنس نرم افزار | ٣٣,٩١٩,٠٠٠ | ۶۷,۸۳۸,۰۰۰ | ۶۷,۸۳۸,۰۰۰ | ۶,٧٨٣,٨٠٠ | ۷۴,۶۲۱,۸۰۰ |
+| جمع كل | ۴۱۷,۸۳۸,۰۰۰ | ۴۱٧,٨٣٨,٠٠٠ | ۴۱,۷۸۳,۸۰۰ | ۴۵۹,۶۲۱,۸۰۰ |</pre>
+<div class="box warn">
+همه‌ی اعداد درست خوانده شدند، ولی سه اشکال واقعی دیده می‌شود (بخش ۱۰): «مبلغ» در سلول‌های تیره «مبلع» خوانده شده؛
+رقم تکِ «۲» در ستون تعداد ردیف ۲ داخل سلول نیامده و شماره‌ی ردیف ۲ «r» خوانده شده؛ ارقام سلول‌ها ترکیبی از فارسی و عربی‌اند.
+</div>
+
+<h1>۵. فاکتور: ستون‌ها، معادلات و اصلاح</h1>
+
+<h2>۵.۱ نگاشت ستون‌ها — <span class="ltr">invoice/columns.py</span></h2>
+<p>ردیفی که حداقل ۳ ستون عددی شناخته‌شده دارد «سرستون اقلام» است. نقش هر ستون با الگوی متن سرستون تعیین می‌شود (الگوی خاص‌تر اول):</p>
+<table>
+<tr><th>نقش</th><th>الگوی سرستون</th></tr>
+<tr><td><span class="ltr">after_discount</span></td><td>«پس از»</td></tr>
+<tr><td><span class="ltr">net</span></td><td>«خالص»، «قابل پرداخت»، «به علاوه»، «جمع مبلغ کل»</td></tr>
+<tr><td><span class="ltr">tax</span></td><td>«مالیات»، «عوارض»، «ارزش افزوده»</td></tr>
+<tr><td><span class="ltr">discount</span>، <span class="ltr">additions</span></td><td>«تخفیف»، «اضافات»</td></tr>
+<tr><td><span class="ltr">unit_price</span></td><td>«مبلغ واحد»، «فی»، «فی واحد»</td></tr>
+<tr><td><span class="ltr">amount</span></td><td>«مبلغ کل»، «مبلغ»</td></tr>
+<tr><td><span class="ltr">qty</span>، <span class="ltr">unit</span></td><td>«مقدار»، «تعداد»؛ «واحد»</td></tr>
+<tr><td><span class="ltr">description</span>، <span class="ltr">code</span>، <span class="ltr">row_no</span></td><td>«شرح»؛ «کد کالا»؛ «ردیف»</td></tr>
+</table>
+<p>هر سلول ردیف‌های بعدی به ستونی می‌رود که بیشترین هم‌پوشانی افقی (بیش از ۵۰٪) را با سرستون دارد. عددها با
+<span class="ltr">parse_number</span> خوانده می‌شوند: جداکننده (<span class="ltr">, ، ٬ ٫ . /</span>) فقط وقتی حذف می‌شود که ارقام سه‌تایی گروه‌بندی شده باشند؛
+اعشار (<span class="ltr">۲٫۵</span>) و تاریخ (<span class="ltr">1402/05/12</span>) عدد حساب نمی‌شوند.</p>
+
+<h2>۵.۲ معادلات هر ردیف — <span class="ltr">invoice/equations.py</span></h2>
+<table>
+<tr><th>معادله</th><th>کاربرد</th></tr>
+<tr><td><span class="ltr">qty × unit_price = amount</span></td><td>کدام عدد غلط است؟</td></tr>
+<tr><td><span class="ltr">amount − discount + additions = after_discount</span></td><td></td></tr>
+<tr><td>مالیات = <span class="ltr">10%</span> یا <span class="ltr">9%</span> پایه</td><td>گرد کردن نصف به بالا با ریاضی صحیح؛ مستقل از خالص بررسی می‌شود</td></tr>
+<tr><td><span class="ltr">net = base + tax</span></td><td>اگر مالیات نیست: <span class="ltr">net = base × (1 + rate)</span></td></tr>
+<tr><td><span class="rtlc">Σ ستون‌ها = ردیف جمع</span></td><td>اگر نخورد و فاکتور چندصفحه‌ای است، در سطح کل سند بررسی می‌شود</td></tr>
+</table>
+
+<h3>قاعده‌ی اصلاح: فقط یکتا</h3>
+<p>عدد OCR فقط وقتی اصلاح می‌شود که با <b>یک ویرایش رقمی</b> (جایگزینی، حذف یا درج یک رقم) به مقدار مورد انتظار برسد.
+اگر بیش از یک اصلاح ممکن است، ستون‌های دیگر ردیف (پس از تخفیف، مالیات، خالص) «شاهد» می‌شوند. اگر باز هم یکتا نشد،
+هیچ عددی عوض نمی‌شود و نتیجه <span class="ltr">mismatch</span> با فهرست کاندیدهاست. خروجی واقعی <span class="ltr">verify_item</span>:</p>
+
+<table>
+<tr><th style="width:42%">ورودی (عددهای OCR)</th><th>نتیجه</th></tr>
+<tr><td><span class="ltr">qty=5, unit=70,000,000, amount=250,000,000, tax=35,000,000, net=385,000,000</span></td>
+<td><span class="ok">corrected</span>: مبلغ ← <span class="ltr">350,000,000</span>. دو اصلاح ممکن بود (مبلغ ۲→۳ یا فی ۷→۵)، ولی فقط مبلغ ۳۵۰ میلیون با مالیات ۱۰٪ و خالص جور است.</td></tr>
+<tr><td><span class="ltr">qty=5, unit=70,000,000, amount=250,000,000</span></td>
+<td><span class="no">mismatch</span>، هیچ تغییری. کاندیدها: <span class="ltr">amount=350,000,000</span> یا <span class="ltr">unit_price=50,000,000</span>. شاهدی برای انتخاب نیست؛ به مرور انسانی می‌رود.</td></tr>
+<tr><td><span class="ltr">qty=2, unit=33,919,000, amount=67,838,000, net=74,621,800</span></td>
+<td><span class="ok">ok</span> و <span class="ltr">base×(1+10%)=net</span> هم <span class="ok">ok</span>.</td></tr>
+</table>
+
+<h2>۵.۳ طرفین معامله و شناسه‌ها — <span class="ltr">invoice/header.py</span></h2>
+<ul>
+<li>شماره و تاریخ فاکتور و شناسه یکتای مالیاتی هم از جدول و هم از متن کل صفحه (سربرگ معمولاً بیرون جدول است) پیدا می‌شوند.</li>
+<li>بخش فروشنده و خریدار از عنوان‌هایشان جدا می‌شود؛ شماره اقتصادی، شناسه ملی، شماره ثبت، کدپستی و تلفن استخراج می‌شوند.</li>
+<li><b>قاعده‌ی شخص حقوقی:</b> شماره اقتصادی = شناسه ملی. اگر یکی checksum معتبر دارد و دیگری فقط یک رقم فاصله دارد، دومی اصلاح می‌شود.</li>
+</ul>
+
+<h2>۵.۴ نتیجه‌ی واقعی روی فاکتور نمونه‌ی ب</h2>
+<table>
+<tr><th style="width:30%">بخش</th><th>خروجی</th></tr>
+<tr><td>سربرگ</td><td>تاریخ <span class="ltr">1405/03/17</span>، شماره <span class="ltr">1024</span> <span class="ok">✓</span></td></tr>
+<tr><td>فروشنده</td><td>شماره اقتصادی <span class="ltr">10865432173</span> (checksum درست)؛ شناسه ملی <span class="ltr">10865482173 → 10865432173</span> <span class="ok">در ساختار فاکتور اصلاح شد ✓</span> (قاعده‌ی شخص حقوقی)؛ متن خروجی همان خوانش خام را نگه می‌دارد و سه کاندید در صف مرور است: <span class="ltr">10565482173، 10865282173، 10865432173</span>.</td></tr>
+<tr><td>خریدار</td><td>شماره اقتصادی <span class="ltr">10771234561</span>، کدپستی <span class="ltr">1478935261</span> <span class="ok">✓</span></td></tr>
+<tr><td>اقلام</td><td>۲ ردیف با پس از تخفیف، مالیات و خالص؛ همه‌ی معادلات مالیات و خالص <span class="ok">ok</span></td></tr>
+<tr><td>جمع‌ها</td><td>جمع پس از تخفیف، مالیات و خالص با جمع اقلام برابر <span class="ok">ok</span></td></tr>
+<tr><td>خلاصه</td><td>۱۰ <span class="ltr">ok</span>، ۱ <span class="ltr">corrected</span>، ۰ <span class="ltr">mismatch</span></td></tr>
+<tr><td>خطای مبلغ ردیف ۱</td><td><span class="no">گرفته نشد.</span> ستون‌های «مبلغ واحد» و «مبلغ کل» نگاشت نشدند چون سرستون «مبلع» خوانده شده بود؛ پس معادله‌ی <span class="ltr">qty × unit = amount</span> اصلاً اجرا نشد (بخش ۱۰).</td></tr>
+</table>
+
+<h2>۵.۵ سطح کل سند — <span class="ltr">invoice/document.py</span></h2>
+<ul>
+<li><b>رأی سربرگ:</b> در فاکتور ≥ ۳ صفحه، تاریخ و شماره‌ی فاکتور با رأی اکثریت (≥ ۶۰٪) یکسان می‌شوند.</li>
+<li><b>تعمیر مقیاس ردیف:</b> اگر یک ردیف فی و مبلغش هر دو یک صفر کم یا زیاد دارند (ردیف خودش سازگار است!) و ×۱۰ یا ÷۱۰ <b>دقیقاً یک</b> ردیف جمع سند را <b>دقیقاً</b> برابر کند، اعمال می‌شود. این مورد در فاکتور ۱۵ صفحه‌ای واقعاً دیده شد.</li>
+<li><b>جمع سند:</b> چک‌هایی که در سطح صفحه نخوردند (<span class="ltr">deferred</span>) با جمع اقلام همه‌ی صفحه‌ها بسته می‌شوند.</li>
+</ul>
+
+<h1>۶. قواعد متنی: نرمال‌سازی، checksum، تاریخ و دیکشنری</h1>
+<p>همه‌ی متن صفحه (بیرون از جدول) به ترتیب از این قواعد می‌گذرد (<span class="ltr">text/postprocess.py</span>):</p>
+
+<h2>۶.۱ نرمال‌سازی — <span class="ltr">text/normalize.py</span></h2>
+<ul>
+<li>ارقام فارسی و عربی ← لاتین؛ <span class="rtlc">ي ← ی</span>، <span class="rtlc">ك ← ک</span>، <span class="rtlc">ۀ ← ه</span>.</li>
+<li>حذف نویسه‌های نامرئی و ایموجی‌های سربرگ و پاورقی؛ یکسان کردن فاصله‌ها. ساختار خطوط عوض نمی‌شود.</li>
+</ul>
+
+<h2>۶.۲ checksum شناسه‌ها — <span class="ltr">text/validators.py</span>، <span class="ltr">correction.py</span></h2>
+<table>
+<tr><th style="width:22%">شناسه</th><th>قاعده</th></tr>
+<tr><td>کد ملی (۱۰ رقم)</td><td><span class="ltr">r = Σ d[i]×(10−i) mod 11</span>؛ رقم آخر = <span class="ltr">r</span> اگر <span class="ltr">r &lt; 2</span>، وگرنه <span class="ltr">11 − r</span>. ده رقم یکسان رد می‌شود.</td></tr>
+<tr><td>شناسه ملی حقوقی (۱۱ رقم)</td><td>هر رقم + (رقم دهم + ۲)، ضرب در ضرایب <span class="ltr">29, 27, 23, 19, 17</span>، mod 11</td></tr>
+<tr><td>شبا</td><td><span class="ltr">IR</span> و ۲۴ رقم، mod 97 = 1 (فقط اعتبارسنجی، بدون اصلاح)</td></tr>
+<tr><td>کدپستی</td><td>۱۰ رقم که با صفر شروع نشود</td></tr>
+</table>
+<p>اصلاح فقط برای کد ملی و شناسه ملی، و فقط وقتی متن کنارش «کد ملی / شماره ملی / شناسه ملی» است. سه نوع خطا بررسی می‌شود:</p>
+<ul>
+<li><b>رقم تکراری ادغام‌شده</b> (خطای رایج مدل‌های CTC): <span class="ltr">4297752859 → 429752859</span>. همه‌ی حالت‌های تکرار یک رقم امتحان می‌شوند.</li>
+<li><b>رقم تکراری اضافه:</b> برعکس حالت قبل.</li>
+<li><b>رقم هم‌شکل:</b> یک رقم با رقم‌های شبیه در فونت چاپی عوض می‌شود: <span class="ltr">4↔6↔9</span>، <span class="ltr">4↔1</span>، <span class="ltr">2↔0↔3</span>، <span class="ltr">5↔7</span>، <span class="ltr">5↔8↔0</span>، <span class="ltr">8↔3</span> (نگاشت متقارن).</li>
+</ul>
+<table>
+<tr><th style="width:24%">ورودی</th><th>نتیجه‌ی واقعی</th></tr>
+<tr><td><span class="ltr">4297752859</span></td><td><span class="ok">valid</span></td></tr>
+<tr><td><span class="ltr">429752859</span> (۹ رقم)</td><td><span class="ok">auto_corrected</span> ← <span class="ltr">4297752859</span>؛ در کل فضای کد ملی فقط همین یک کاندید معتبر است.</td></tr>
+<tr><td><span class="ltr">5884825975</span> (۶ ← ۴)</td><td><span class="no">ambiguous_review</span>؛ ۳ کاندید معتبر: <span class="ltr">5886825975</span> (درست)، <span class="ltr">5884325975</span>، <span class="ltr">5884825978</span>. هیچ‌کدام انتخاب نمی‌شود.</td></tr>
+</table>
+
+<h2>۶.۳ تاریخ جلالی — <span class="ltr">text/dates.py</span></h2>
+<ul>
+<li>فاصله یا نقطه به جای اسلش: <span class="ltr">1405.3/30 → 1405/03/30</span> (ماه ۱ تا ۱۲ و روز ۱ تا ۳۱، وگرنه دست نمی‌خورد).</li>
+<li>اسلش دوم افتاده: <span class="ltr">1405/0317 → 1405/03/17</span> (اصلاح خودکار، ثبت می‌شود).</li>
+<li>صفر اضافه در سال: <span class="ltr">14020/11/12 → 1402/11/12</span> (اصلاح خودکار، ثبت می‌شود).</li>
+<li>روز ناقص بعد از «مورخ»: <span class="ltr">.1405/033</span> اصلاح <b>نمی‌شود</b>؛ با کاندیدهای <span class="ltr">1405/03/03، 1405/03/30، 1405/03/31</span> به صف مرور می‌رود.</li>
+</ul>
+
+<h2>۶.۴ معادله‌ی سرمایه (صورتجلسه) — <span class="ltr">text/accounting.py</span></h2>
+<p>عبارت «سرمایه X میلیارد ریال منقسم به Y سهم با نام Z ریالی» باید در <span class="ltr">X × 10⁹ = Y × Z</span> صدق کند.
+اگر Y نخورد ولی ۳ رقم اولش با مقدار مورد انتظار یکی است (خطا فقط در صفرها یا جداکننده)، Y اصلاح می‌شود.
+ارزش اسمی <span class="ltr">10000</span> فقط وقتی <span class="ltr">1000</span> می‌شود که معادله با ۱۰۰۰۰ نخورد و با ۱۰۰۰ دقیقاً بخورد.</p>
+
+<h2>۶.۵ دیکشنری سازمان (اختیاری) — <span class="ltr">text/lexicon.py</span></h2>
+<p>مقادیر ثابت سازمان (شماره ثبت، کدپستی، تلفن) در <span class="ltr">data/domain_lexicon.json</span> هستند. مقدار فقط وقتی جایگزین می‌شود که
+نام سازمان در متن آمده باشد <b>و</b> نشانه‌ای از همان فیلد در OCR دیده شود. نتیجه با برچسب <span class="rtlc">[تطبیق دیکشنری سازمان: ...]</span> به ته متن اضافه می‌شود.
+در API و خط فرمان پیش‌فرض روشن است؛ در ارزیابی همیشه خاموش است چون عدد را مصنوعی بالا می‌برد.</p>
+
+<h2>۶.۶ نمونه‌ی کامل</h2>
+<pre class="rtl">ورودی:  با شماره ملی ۴۲۹۷۵۲۸۵۹ به عنوان مدیرعامل، مورخ ۱۴۰۵/۰۸۱۹ و مورخ .1405/083
+خروجی: با شماره ملی 4297752859 به عنوان مدیرعامل، مورخ 1405/08/19 و مورخ .1405/083
+
+اصلاح خودکار: 429752859 ← 4297752859 (رقم تکراری)   |   1405/0819 ← 1405/08/19
+صف مرور:      مورخ .1405/083  →  کاندیدها: 1405/08/03، 1405/08/30، 1405/08/31</pre>
+
+<h1>۷. ساخت متن نهایی و خروجی‌ها</h1>
+
+<h2>۷.۱ متن کامل و مرتب — <span class="ltr">pipeline._compose_text</span></h2>
+<p>متن نهایی هر صفحه (<span class="ltr">text_dedup</span>) از دو منبع ساخته می‌شود و هر چیز فقط یک بار می‌آید:</p>
+<ol>
+<li><b>خطوط بیرون جدول</b> به ترتیب صفحه؛ هر دسته‌ی پیوسته از قواعد متنی می‌گذرد.</li>
+<li><b>ردیف‌های جدول</b> به شکل <span class="ltr">| a | b | c |</span>، درست در جای عمودی خودشان، نه همه ته صفحه.</li>
+<li>خطی از OCR صفحه که داخل یک سلول است ولی متن سلول آن را «پوشش» نمی‌دهد (کمتر از ۶۰٪ توکن‌ها؛ با تطبیق فازی ۸۰٪) و اطمینانش ≥ ۰٫۷۵ است، زیر عنوان <span class="rtlc">[خطوط تکمیلی از ناحیه جدول]</span> ته صفحه می‌آید تا چیزی گم نشود.</li>
+<li>اگر عددِ خط با عدد سلول فقط در چند رقم فرق دارد (مثلاً <span class="ltr">۳٬۲۰۰٬۰۰۰</span> در برابر <span class="ltr">۲٬۲۰۰٬۰۰۰</span>)، خط «تکراری» دور ریخته نمی‌شود؛ یک مورد <span class="ltr">reading_conflict</span> با هر دو خوانش به صف مرور می‌رود. متن عوض نمی‌شود.</li>
+</ol>
+<p>متن نهایی فاکتور نمونه‌ی ب (عین خروجی، کوتاه‌شده):</p>
+<pre class="rtl">صورتحساب فروش کالا و خدمات
+شماره فاکتور: 1024
+تاریخ: 1405/03/17
+| مشخصات فروشنده |
+| نام: شرکت نمونه آزمایشی | شماره اقتصادی: ۱۰۸۶۵۴۳۲۱۷۳ | شناسه ملی: ۱۰۸۶۵۴۸۲۱۷۳ |
+...
+| ۱ | خدمات مشاوره فنی | ۵ | ٧٠,٠٠٠,٠٠٠ | ٢٥٠,٠٠٠,٠٠٠ | ...
+| r | لایسنس نرم افزار | ٣٣,٩١٩,٠٠٠ | ...
+2
+| جمع كل | ۴۱۷,۸۳۸,۰۰۰ | ...
+[خطوط تکمیلی از ناحیه جدول]
+مبلغ واحد
+مبلغ کل</pre>
+<p class="small">دو خط تکمیلی همان سرستون‌هایی‌اند که OCR صفحه درست («مبلغ») ولی OCR سلول غلط («مبلع») خوانده بود. «2» تنها همان رقم تعداد ردیف ۲ است که به سلولش نرسید.</p>
+
+<h2>۷.۲ فایل‌های خروجی — <span class="ltr">report/</span></h2>
+<table>
+<tr><th style="width:18%">فایل</th><th>محتوا</th></tr>
+<tr><td><span class="ltr">name.txt</span></td><td>متن نهایی هر صفحه با سرتیتر <span class="rtlc">=== صفحه N ===</span></td></tr>
+<tr><td><span class="ltr">name.json</span></td><td>برای هر صفحه: <span class="ltr">raw_text</span>، <span class="ltr">text</span>، <span class="ltr">text_dedup</span>، <span class="ltr">corrections</span>، <span class="ltr">review_queue</span>، <span class="ltr">low_confidence_lines</span>، <span class="ltr">tables_markdown</span>، <span class="ltr">invoice</span></td></tr>
+<tr><td><span class="ltr">name.html</span></td><td>تصویر صفحه کنار متن؛ کادر سبز اصلاح‌ها، نارنجی موارد مرور، قرمز خطوط کم‌اطمینان؛ کادر فاکتور با رنگ وضعیت هر معادله</td></tr>
+</table>
+<p>نام فایل‌ها همیشه نام فایل ورودی است (<span class="ltr">18185.pdf → 18185.txt</span>)؛ خط فرمان و API از یک تابع (<span class="ltr">render_bundle</span>) استفاده می‌کنند.</p>
+
+<h1>۸. راه‌های استفاده: خط فرمان، کد پایتون و API</h1>
+
+<h2>خط فرمان</h2>
+<pre class="ltr-block">run.bat "files\sample.pdf"                                  :: OCR and write output\
+.venv\Scripts\python.exe -m persian_ocr run FILE --max-pages 1 --no-lexicon --out DIR
+.venv\Scripts\python.exe -m persian_ocr debug INVOICE.pdf --page 2   :: table + equations of one page
+.venv\Scripts\python.exe -m persian_ocr serve --host 127.0.0.1 --port 8000</pre>
+
+<h2>کد پایتون</h2>
+<pre class="ltr-block">from persian_ocr.config import PipelineConfig
+from persian_ocr.engine import OcrEngine
+from persian_ocr.pipeline import process_document
+
+engine = OcrEngine.load(threads=4)
+result = process_document(engine, "doc.pdf", PipelineConfig(use_lexicon=False))
+page = result["pages"][0]
+page["text_dedup"], page["corrections"], page["review_queue"], page["invoice"]</pre>
+
+<h2>سرویس HTTP (FastAPI + Swagger آفلاین روی <span class="ltr">/docs</span>)</h2>
+<table>
+<tr><th style="width:38%">Endpoint</th><th>کار</th></tr>
+<tr><td><span class="ltr">POST /ocr</span></td><td>نتیجه‌ی کامل (همان JSON)</td></tr>
+<tr><td><span class="ltr">POST /ocr/text</span></td><td>فقط متن نهایی هر صفحه</td></tr>
+<tr><td><span class="ltr">POST /ocr/review</span></td><td>گزارش HTML مرور</td></tr>
+<tr><td><span class="ltr">POST /ocr/download?format=txt|json|html|zip</span></td><td>دانلود با نام فایل ورودی</td></tr>
+<tr><td><span class="ltr">POST /validate/national-id | legal-id | iban | postal-code</span></td><td>checksum و اصلاح محافظه‌کارانه، بدون مدل</td></tr>
+<tr><td><span class="ltr">POST /text/postprocess | /text/normalize</span></td><td>قواعد متنی روی هر متن</td></tr>
+<tr><td><span class="ltr">POST /invoice/verify-item</span></td><td>معادلات یک ردیف فاکتور</td></tr>
+<tr><td><span class="ltr">GET /health</span></td><td>وضعیت سرویس (بدون احراز هویت)</td></tr>
+</table>
+<ul>
+<li><b>امنیت:</b> پیش‌فرض روی همه‌ی کارت‌های شبکه و بدون احراز هویت. با <span class="ltr">PERSIAN_OCR_API_KEY</span> هدر <span class="ltr">X-API-Key</span> اجباری می‌شود.</li>
+<li><b>همزمانی:</b> درخواست‌های OCR پشت سر هم اجرا می‌شوند (موتور حالت مشترک دارد).</li>
+<li><b>حریم خصوصی:</b> فایل آپلودی فقط در طول درخواست در <span class="ltr">.cache/tmp</span> است و همیشه پاک می‌شود. حد حجم پیش‌فرض ۱۰۰ مگابایت.</li>
+</ul>
+
+<h1>۹. ارزیابی و نتیجه‌ها</h1>
+<p>۸ سند (۶ فاکتور و ۲ نامه؛ ۲۷ صفحه) با متن درست دستی. حالت مهندسی‌شده همیشه <b>بدون دیکشنری سازمان</b> سنجیده می‌شود.
+۳۰ عدد GT که با دیدن تصویر «غلطِ خود GT» یا «روی سند چاپ‌نشده» تشخیص داده شدند، فقط در حافظه کنار گذاشته می‌شوند (ماسک GT).</p>
+<table>
+<tr><th>متریک (۶ سند ۱ تا ۲ صفحه‌ای)</th><th class="num">Indra خام</th><th class="num">این پروژه</th></tr>
+<tr><td>Word Accuracy ↑</td><td class="num">74.2٪</td><td class="num"><b>83.9٪</b></td></tr>
+<tr><td>WER بدون‌ترتیب ↓</td><td class="num">25.8٪</td><td class="num"><b>16.3٪</b></td></tr>
+<tr><td>SER (خط با حداقل یک خطا) ↓</td><td class="num">67.0٪</td><td class="num"><b>45.6٪</b></td></tr>
+<tr><td>دقت اعداد ≥ ۴ رقم ↑</td><td class="num">24.5٪</td><td class="num"><b>78.4٪</b> (بدون ماسک ۶۸٫۱٪)</td></tr>
+</table>
+<table>
+<tr><th>مقایسه روی ۳ سند دارای GT</th><th class="num">Word Acc ↑</th><th class="num">SER adj ↓</th><th class="num">دقت اعداد ↑</th></tr>
+<tr><td>این پروژه (بدون دیکشنری)</td><td class="num">68.9٪</td><td class="num">52.6٪</td><td class="num">63.2٪</td></tr>
+<tr><td>Claude</td><td class="num">73.4٪</td><td class="num">52.6٪</td><td class="num">67.6٪</td></tr>
+<tr><td>Gemini</td><td class="num">74.0٪</td><td class="num">56.9٪</td><td class="num">64.7٪</td></tr>
+<tr><td>Chandra</td><td class="num">59.3٪</td><td class="num">67.9٪</td><td class="num">35.3٪</td></tr>
+</table>
+<div class="box warn">
+<b>هشدار صادقانه:</b> ۷ سند از ۸ سند همان‌هایی‌اند که پایپ‌لاین روی آن‌ها تنظیم شد؛ اعداد <b>in-sample و خوش‌بینانه‌اند</b>.
+مقایسه با مدل‌های دیگر فقط ۳ سند است و معنی‌دار آماری نیست. «۹۶٪ معادلات فاکتور برقرار» یعنی اعداد با هم سازگارند، نه اینکه هر رقم تضمین‌شده درست است.
+</div>
+<p>ابزارهای ارزیابی: <span class="ltr">python -m evaluation</span> (متریک‌ها)، <span class="ltr">fields</span> (فیلدهای نامه‌ها)، <span class="ltr">compare</span> (مقایسه با مدل‌های دیگر)،
+<span class="ltr">errors</span> (گالری اعداد اشتباه با برش تصویر و دکمه‌ی قضاوت)، <span class="ltr">dashboard</span> (تصویر هر صفحه کنار خروجی).</p>
+
+<h1>۱۰. آنچه در اجرای همین سند دیده شد (نقاط ضعف واقعی)</h1>
+<p>این موارد از اجرای واقعی کد روی دو فاکتور این سند (الف و ب) آمده‌اند، نه از حدس. هر دو فاکتور <b>مصنوعی و تمیز</b>اند؛ روی اسکن واقعی مشکلات بیشتری دیده می‌شود.</p>
+
+<div class="box bad">
+<b>۱. سرستون تیره بد خوانده شد و معادله‌ها از کار افتادند.</b> OCR سلول‌های تیره «مبلغ» را «مبلع»، «تعداد» را «نعداد»، «پس از» را «بس از»، «خالص» را «حالص»
+و «شرح» را «سرح» خواند. الگوهای نگاشت ستون این‌ها را نمی‌شناسند.
+در <b>فاکتور الف هیچ ستون عددی شناخته نشد</b>: <span class="ltr">invoice = None</span> و هیچ معادله‌ای اجرا نشد.
+در فاکتور ب چهار ستون شناخته شد ولی «مبلغ واحد» و «مبلغ کل» نه، پس معادله‌ی <span class="ltr">qty × unit = amount</span> اجرا نشد و خطای عمدی <span class="ltr">۲۵۰٬۰۰۰٬۰۰۰</span> گرفته نشد.
+جالب اینکه OCR خود صفحه همان سرستون‌ها را <b>درست</b> خوانده بود (<span class="rtlc">مبلغ واحد، مبلغ کل، جمع مالیات و عوارض</span>).
+<br><b>راه‌حل پیشنهادی:</b> نرمال‌سازی و تطبیق فازی متن سرستون، یا استفاده از خوانش صفحه وقتی خوانش سلول تیره نقش نمی‌دهد.
+</div>
+
+<div class="box bad">
+<b>۲. رقم «۳» در چند سلول «۲» خوانده شد و خوانش درستِ خط صفحه ساکت حذف شد (فاکتور الف).</b>
+خوانش سلول‌ها: <span class="ltr">۳٬۲۰۰٬۰۰۰ ← ۲٬۲۰۰٬۰۰۰</span>، <span class="ltr">۳۲٬۰۰۰٬۰۰۰ ← ۲۲٬۰۰۰٬۰۰۰</span>، <span class="ltr">۳۳٬۰۰۰٬۰۰۰ ← ۲۳٬۰۰۰٬۰۰۰</span>
+و جمع <span class="ltr">۱۷۰٬۰۰۰٬۰۰۰ ← ۱۷۰٬۰۰۵٬۰۰۰</span>. برای سه مورد (فی، مبلغ و جمع) خوانش خط صفحه <b>درست</b> بود (<span class="ltr">٣٬٢٠٠٬٠٠٠</span> و <span class="ltr">٣٢٬٠٠٠٬٠٠٠</span> و <span class="ltr">١٧٠٬٠٠٠٬٠٠٠</span>؛ برای <span class="ltr">۳۳٬۰۰۰٬۰۰۰</span> خط صفحه هم «۲۳» خوانده بود)،
+ولی چون پوشش فازی (بخش ۷.۱) عددی را که یک رقم فرق دارد «همان» حساب می‌کند، خط درست به‌عنوان تکراری کنار رفت و خوانش غلط سلول در متن ماند
+(با خود تابع <span class="ltr">_covered</span> برای هر سه جفت آزموده شد: <span class="ltr">True</span>).
+این همان اشتباه شناخته‌شده‌ی <span class="ltr">3 ← 2</span> است که در بررسی ارقام اسناد واقعی هم بیشترین تکرار را داشت.
+<br><b>اصلاح شد (۲۰۲۶-۱۱-۱۰):</b> وقتی خوانش سلول و خط روی یک عدد فقط در چند رقم فرق دارند، به‌جای حذف ساکت یک مورد <span class="ltr">reading_conflict</span> به صف مرور می‌رود
+(متن خروجی عوض نمی‌شود؛ حدس نمی‌زند کدام درست است). روی همین فاکتور الف ۶ تعارض گزارش شد: ۵ مورد خطای واقعی سلول (علاوه بر اعداد بالا، شماره اقتصادی
+<span class="ltr">10901334562</span> به‌جای <span class="ltr">10901234562</span> و کدپستی <span class="ltr">1592613492</span> به‌جای <span class="ltr">1593613492</span>) و ۱ هشدار الکی (خط <span class="ltr">۰٬۰۰۰٬۰۰۰</span>).
+برای <span class="ltr">۳۳٬۰۰۰٬۰۰۰</span> که خط و سلول هر دو «۲۳» خواندند تعارضی نیست، پس آن گرفته نمی‌شود. روی ۸ سند ارزیابی: ۸۶ تعارض، ۲۰ مورد خطای واقعی که خط درست داشت و ۳۷ هشدار الکی
+(دقت هشدار ≈ ۳۵٪؛ اطمینان خوانش‌ها آن‌ها را جدا نکرد، پس فیلتری گذاشته نشد). این هشدار فقط «ببین» می‌گوید، نه «این درست است».
+</div>
+
+<div class="box bad">
+<b>۳. رقم تک در سلول گم شد.</b> در فاکتور الف شماره‌ی ردیف ۲ و ۳ و تخفیف «۰» ردیف ۱ به سلولشان نرسیدند (<span class="ltr">۲</span> و <span class="ltr">۳</span> جدا و ته جدول آمدند).
+در فاکتور ب شماره‌ی ردیف ۲ «r» خوانده شد و تعداد آن ردیف خالی ماند. همان «تله‌ی رقم تک» که برایش fallback جوهر ساخته شده، هنوز همه‌ی حالت‌ها را نمی‌گیرد.
+</div>
+
+<div class="box warn">
+<b>۴. خروجی مهر در متن نهایی نیامد.</b> حلقه‌ی مهر خوانده شد ولی فقط ابتدایش («شرکت ارمان تجارت»)، و آن خط بعد از ادغام حذف شد (احتمالاً به‌خاطر خط «مهر شرکت» وسط مهر؛ بخش ۳.۶).
+</div>
+
+<div class="box warn">
+<b>۵. چند اشتباه حرفی با اطمینان بالا.</b> «صورتحساب» ← «صورتجشاب» (اطمینان <span class="ltr">0.957</span>) و «کدپستی» ← «کدیستی» (<span class="ltr">0.894</span>) در فاکتور الف. این برچسب‌ها اگر برای قاعده‌ای (مثل چک کدپستی) لازم باشند، قاعده اجرا نمی‌شود.
+ترتیب بخش‌های تلفن پاورقی هم برعکس شد.
+</div>
+
+<div class="box info">
+<b>۶. ارقام جدول نرمال نمی‌شوند.</b> متن بیرون جدول ارقام لاتین دارد ولی سلول‌های جدول ترکیب ارقام فارسی و عربی‌اند (<span class="ltr">۶۷,۸۳۸</span> و <span class="ltr">٧٠,٠٠٠</span>).
+برای فاکتور مشکلی نیست (عددها نرمال می‌شوند) ولی فایل txt یکدست نیست.
+</div>
+
+<div class="box key">
+<b>آنچه درست کار کرد:</b> جهت‌یابی (امتیاز <span class="ltr">0.802</span> در برابر <span class="ltr">0.39</span>)؛ حذف کامل واترمارک؛ شماره ثبت و شناسه‌های روی واترمارک؛ ترتیب برچسب و مقدار؛
+۵۶ سلول با ۹ سلول تیره در فاکتور الف و ۳۸ سلول با ۸ سلول تیره در فاکتور ب؛ همه‌ی عددهای جدول فاکتور ب؛
+فاکتور ب: ساختار فاکتور (۱۰ معادله‌ی ok و ۱ اصلاح) و اصلاح یکتای شناسه ملی فروشنده با قاعده‌ی شخص حقوقی، با سه کاندید در صف مرور.
+</div>
+
+<h1>۱۱. محدودیت‌ها و قدم‌های بعدی</h1>
+<h2>محدودیت‌ها</h2>
+<ul>
+<li>جدول بدون خط‌کشی (یا با خط‌کشی خیلی کم‌رنگ) پشتیبانی نمی‌شود.</li>
+<li>اسکن کم‌کیفیت: ارقام کنار مرز سلول بریده می‌شوند (فاکتور ۲۹۶۰۳: دقت اعداد ۴۰٪ بعد از ماسک GT).</li>
+<li>متن چندستونه: ترتیب خواندن بعد از ادغام تایل‌ها به هم می‌ریزد.</li>
+<li>تلفن و فکس پاورقی بدون دیکشنری ناقص‌اند؛ خروجی مهر دایره‌ای ناقص است.</li>
+<li>PDF با چند فاکتور مثل یک فاکتور پردازش می‌شود.</li>
+<li>خطا در یک جدول یا صفحه کل سند را متوقف می‌کند.</li>
+<li>فقط CPU؛ API در هر لحظه یک پردازش OCR.</li>
+<li>مجوز وزن‌های Indra: OpenRAIL-M. قبل از استقرار سازمانی باید بررسی شود.</li>
+</ul>
+<h2>قدم‌های بعدی پیشنهادی</h2>
+<ol>
+<li>تطبیق فازی سرستون فاکتور (یافته‌ی ۱ همین سند).</li>
+<li>هشدار تعارض خوانش سلول و خط انجام شد (یافته‌ی ۲ همین سند)؛ قدم بعد: استفاده از معادلات فاکتور برای انتخاب بین دو خوانش، تا ۳۷ هشدار الکی کم شود.</li>
+<li>نوشتن اصلاح‌های یکتای فاکتور در متن خروجی (تخمین +۱۰ عدد از ۴۷۶).</li>
+<li>قاعده‌ی صفر اول تلفن.</li>
+<li>بررسی فاکتور ۲۹۶۰۳ (۱۵ از ۳۵ خطای واقعی ارقام).</li>
+<li>موتور OCR دوم برای رأی‌گیری مستقل روی ارقام.</li>
+<li>سنجش روی اسناد ناآشنا (out-of-sample).</li>
+</ol>
+
+<h1>پیوست: تنظیمات، متغیرهای محیطی و نقشه‌ی فایل‌ها</h1>
+<h2><span class="ltr">PipelineConfig</span></h2>
+<table>
+<tr><th>فیلد</th><th class="num">پیش‌فرض</th><th>معنی</th></tr>
+<tr><td><span class="ltr">dpi</span></td><td class="num">300</td><td>وضوح رندر PDF</td></tr>
+<tr><td><span class="ltr">tiling</span></td><td class="num">True</td><td>دو تایل هم‌پوشان</td></tr>
+<tr><td><span class="ltr">overlap_ratio</span></td><td class="num">0.18</td><td>سهم هم‌پوشانی تایل‌ها</td></tr>
+<tr><td><span class="ltr">engineered</span></td><td class="num">True</td><td>همه‌ی تکنیک‌ها؛ False = Indra خام</td></tr>
+<tr><td><span class="ltr">tables</span></td><td class="num">True</td><td>استخراج جدول و فاکتور</td></tr>
+<tr><td><span class="ltr">header_fraction</span></td><td class="num">0.30</td><td>بخش بالای صفحه برای حذف واترمارک</td></tr>
+<tr><td><span class="ltr">low_conf</span></td><td class="num">0.75</td><td>آستانه‌ی خط کم‌اطمینان</td></tr>
+<tr><td><span class="ltr">use_lexicon</span></td><td class="num">True</td><td>دیکشنری سازمان</td></tr>
+<tr><td><span class="ltr">max_pages</span></td><td class="num">0</td><td>حداکثر صفحه (۰ = همه)</td></tr>
+</table>
+<h2>متغیرهای محیطی</h2>
+<table>
+<tr><th>متغیر</th><th>پیش‌فرض</th><th>کاربرد</th></tr>
+<tr><td><span class="ltr">PERSIAN_OCR_MODEL_DIR</span></td><td><span class="ltr">indra-ocr/</span></td><td>پوشه‌ی وزن‌های مدل</td></tr>
+<tr><td><span class="ltr">PERSIAN_OCR_API_KEY</span></td><td>خالی</td><td>کلید هدر <span class="ltr">X-API-Key</span></td></tr>
+<tr><td><span class="ltr">PERSIAN_OCR_MAX_UPLOAD_MB</span></td><td>100</td><td>حداکثر حجم آپلود</td></tr>
+<tr><td><span class="ltr">PERSIAN_OCR_HOST</span> / <span class="ltr">PORT</span></td><td><span class="ltr">0.0.0.0</span> / 8000</td><td>آدرس سرویس</td></tr>
+</table>
+<p class="small">با وارد شدن بسته‌ی <span class="ltr">persian_ocr</span>، <span class="ltr">TEMP</span>، <span class="ltr">TMP</span> و <span class="ltr">HF_HOME</span> به <span class="ltr">.cache/</span> داخل پروژه می‌روند تا چیزی روی درایو C نوشته نشود.</p>
+
+<h2>نقشه‌ی فایل‌ها</h2>
+<pre class="ltr-block">persian_ocr/
+  config.py  engine.py  pdfio.py  orientation.py  tiling.py  pipeline.py  cli.py
+  vision/    watermark.py  footer.py  stamps.py
+  tables/    cells.py  dark.py  lines.py  extract.py  models.py
+  invoice/   numbers.py  columns.py  equations.py  header.py  parser.py  document.py
+  text/      normalize.py  validators.py  correction.py  dates.py  accounting.py  lexicon.py  postprocess.py
+  report/    html.py  files.py
+  api/       app.py  deps.py  uploads.py  downloads.py  schemas.py  server.py  routes/
+  data/domain_lexicon.json
+evaluation/  metrics  report  fields  compare  dashboard  errors  groundtruth  cache  hypotheses
+tests/       197 unit tests (no model needed)
+docs/        code-reference.md/.html  techniques.md  project-memory.md  guide/ (this document)</pre>
+<p class="small">جزئیات تابع‌به‌تابع: <span class="ltr">docs/code-reference.md</span>. توضیح هر تکنیک با مشکل دیده‌شده و شواهد: <span class="ltr">docs/techniques.md</span>.</p>
+
+</body>
+</html>

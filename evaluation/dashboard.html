@@ -1,0 +1,267 @@
+<!-- Dashboard template: evaluation/dashboard.py replaces the data placeholder with the results JSON. -->
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>داشبورد خروجی OCR</title>
+<style>
+:root{
+  --bg:#f3f5f8;--panel:#fff;--panel2:#f8f9fb;--text:#172033;--mut:#5d6879;--faint:#8a93a3;--bd:#dfe3ea;--bd2:#cdd3dd;
+  --acc:#1f5eff;--accbg:#e8efff;--good:#12805a;--goodbg:#dff4ea;--warn:#9a5b00;--warnbg:#fff0d3;--bad:#bf2a2a;--badbg:#fde3e3;
+  --fixbg:#c9efd9;--revbg:#ffd9a0;--lowbg:#fff4f4;
+  --sh:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.04);
+  --ui:Vazirmatn,"Segoe UI",Tahoma,system-ui,sans-serif;--fa:Vazirmatn,Tahoma,"Noto Naskh Arabic",sans-serif;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#12151b;--panel:#1a1e26;--panel2:#20252e;--text:#e6e9ef;--mut:#a0a9b8;--faint:#7b8494;--bd:#2c323d;--bd2:#3a4150;
+  --acc:#7da0ff;--accbg:#222c4a;--good:#46c48d;--goodbg:#173a2b;--warn:#f0b04a;--warnbg:#3d2f10;--bad:#f27a7a;--badbg:#44201f;
+  --fixbg:#1d5a3a;--revbg:#7a4d12;--lowbg:#3a2224}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.6 var(--ui);background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+header{display:flex;align-items:center;gap:16px;padding:0 16px;height:48px;background:var(--panel);border-bottom:1px solid var(--bd);flex:none}
+.brand{font-size:16px;font-weight:700}
+.tabs{display:flex;gap:4px;height:100%}
+.tabs button{border:0;background:none;padding:0 14px;cursor:pointer;color:var(--mut);font-weight:500;border-bottom:2px solid transparent;margin-top:2px}
+.tabs button:hover{color:var(--text)}
+.tabs button.on{color:var(--acc);border-bottom-color:var(--acc);font-weight:600}
+.sp{flex:1}
+.btn{border:1px solid var(--bd2);background:var(--panel);border-radius:6px;padding:4px 11px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--acc);color:var(--acc)}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.icon{padding:4px 9px}
+.sel{border:1px solid var(--bd2);background:var(--panel);border-radius:6px;padding:4px 8px;cursor:pointer;max-width:260px}
+.mut{color:var(--mut)}
+.badge{display:inline-block;padding:1px 10px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap}
+.badge.warn{background:var(--warnbg);color:var(--warn)}.badge.bad{background:var(--badbg);color:var(--bad)}.badge.neutral{background:var(--bd);color:var(--mut)}
+main{flex:1;min-height:0;display:flex;flex-direction:column}
+#overview{padding:24px;overflow:auto;flex:1}
+.wrap{max-width:1250px;margin:0 auto}
+.pagehead h2{margin:0 0 4px;font-size:22px}
+.pagehead p{margin:0 0 16px;color:var(--mut)}
+.notice{background:var(--warnbg);color:var(--warn);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px}
+.notice ul{margin:4px 0 0;padding-inline-start:20px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.card{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:12px 16px;box-shadow:var(--sh)}
+.card span{display:block;color:var(--mut);font-size:13px}
+.card b{display:block;font-size:24px;line-height:1.3}
+.card small{color:var(--faint);font-size:12px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 22px;background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--mut)}
+.legend strong{width:100%;color:var(--text)}
+.sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-3px;margin-inline-end:6px;border:1px solid rgba(0,0,0,.12)}
+.sw.fix{background:var(--fixbg)}.sw.rev{background:var(--revbg)}.sw.low{background:var(--lowbg);border-inline-start:3px solid var(--warn)}
+.tools{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.tools input[type=search]{border:1px solid var(--bd2);background:var(--panel);border-radius:6px;padding:5px 10px;min-width:220px}
+.tblwrap{background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:auto;box-shadow:var(--sh)}
+table.ov{width:100%;border-collapse:collapse}
+table.ov th,table.ov td{padding:10px 12px;text-align:start;border-bottom:1px solid var(--bd);white-space:nowrap}
+table.ov tbody tr:last-child td{border-bottom:0}
+table.ov th{background:var(--panel2);color:var(--mut);font-weight:600;font-size:13px;cursor:pointer;user-select:none;position:sticky;top:0}
+table.ov th:hover{color:var(--text)}
+table.ov tr.r{cursor:pointer}table.ov tr.r:hover td{background:var(--accbg)}
+table.ov td.name{font-weight:600}
+.num{direction:ltr;unicode-bidi:plaintext;display:inline-block}
+.none{padding:30px;text-align:center;color:var(--mut)}
+#viewer{display:none;flex:1;min-height:0;flex-direction:column}
+.toolbar{display:flex;gap:10px;align-items:center;padding:6px 14px;flex-wrap:wrap;border-bottom:1px solid var(--bd);background:var(--panel);flex:none}
+.group{display:flex;align-items:center;gap:4px}
+.vdiv{width:1px;height:24px;background:var(--bd)}
+.opts{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.opts label{display:inline-flex;gap:6px;align-items:center;cursor:pointer;color:var(--mut);white-space:nowrap}
+.strip{padding:5px 14px;border-bottom:1px solid var(--bd);background:var(--panel2);display:flex;gap:6px 18px;align-items:center;flex-wrap:wrap;flex:none;font-size:13px}
+.strip .chip b{margin-inline-start:4px}
+.strip .chip.bad b{color:var(--bad)}
+.grid{flex:1;min-height:0;display:flex;gap:10px;padding:10px 14px}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden;box-shadow:var(--sh)}
+.col>h3{margin:0;padding:8px 14px;font-size:14px;border-bottom:1px solid var(--bd);background:var(--panel2);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.col>h3 small{font-weight:400;color:var(--mut);font-size:12px}
+.scroll{flex:1;overflow:auto;padding:12px}
+.imgwrap{background:var(--panel2)}
+.rotbox{position:relative;margin:0 auto}
+.rotbox img{position:absolute;left:50%;top:50%;display:block;max-width:none;border:1px solid var(--bd);background:#fff}
+.rotlabel{direction:ltr;min-width:38px;text-align:center;font-weight:600}
+.content{font-family:var(--fa);font-size:var(--fs,16px);line-height:1.9}
+.content .l{padding:0 2px}
+.content .l.low{background:var(--lowbg);border-inline-start:3px solid var(--warn);padding-inline-start:8px}
+.content .sup{margin:10px 0 4px;padding-top:6px;border-top:1px dashed var(--bd2);color:var(--mut);font-size:.85em}
+.content table.t{border-collapse:collapse;margin:6px 0;width:100%;font-size:.92em;line-height:1.7}
+.content td{border:1px solid var(--bd2);padding:3px 8px;vertical-align:top}
+.w.fix{background:var(--fixbg);border-radius:3px}
+.w.rev{background:var(--revbg);border-radius:3px}
+body.nohl .w{background:none!important}
+body.nohl .l.low{background:none;border:0}
+.empty{padding:28px 18px;color:var(--mut);text-align:center}
+details.more{margin-top:12px;border:1px solid var(--bd);border-radius:8px;padding:6px 10px;font-family:var(--ui);font-size:13px}
+details.more summary{cursor:pointer;font-weight:600}
+.box{border-radius:6px;padding:8px 10px;margin:8px 0;font-size:13px}
+.box.fix{background:var(--goodbg)}.box.rev{background:var(--warnbg)}.box.low{background:var(--badbg)}.box.inv{background:var(--panel2);border:1px solid var(--bd2)}
+.box ul{margin:4px 0;padding-inline-start:20px}
+code{direction:ltr;unicode-bidi:embed;background:rgba(127,127,127,.15);padding:0 4px;border-radius:3px}
+body.noimg #imgcol{display:none}
+body.focus header,body.focus .strip{display:none}
+@media(max-width:1000px){.grid{flex-direction:column;overflow:auto}.col{min-height:60vh}}
+</style></head><body>
+<header>
+ <div class="brand">داشبورد خروجی OCR</div>
+ <div class="tabs"><button id="tabO" class="on">نمای کلی</button><button id="tabV">تصویر و خروجی</button></div>
+ <span class="sp"></span>
+ <span class="mut" id="gen"></span>
+</header>
+<main>
+ <section id="overview"><div class="wrap" id="ovin"></div></section>
+ <section id="viewer">
+  <div class="toolbar">
+   <button class="btn" id="back">← همه‌ی اسناد</button>
+   <span class="vdiv"></span>
+   <div class="group"><button class="btn icon" id="prevDoc" title="سند قبلی (P)">›</button><select class="sel" id="docSel" aria-label="سند"></select><button class="btn icon" id="nextDoc" title="سند بعدی (N)">‹</button></div>
+   <div class="group"><button class="btn icon" id="prevPg" title="صفحه‌ی قبلی (→)">›</button><select class="sel" id="pageSel" aria-label="صفحه"></select><button class="btn icon" id="nextPg" title="صفحه‌ی بعدی (←)">‹</button></div>
+   <span class="vdiv"></span>
+   <div class="group" role="group" aria-label="چرخش تصویر">
+    <button class="btn icon" id="rotL" title="۹۰ درجه به چپ (Shift+R)">⟲</button>
+    <span class="rotlabel" id="rotLabel">0°</span>
+    <button class="btn icon" id="rotR" title="۹۰ درجه به راست (R)">⟳</button>
+    <button class="btn icon" id="rot180" title="۱۸۰ درجه">⇅</button>
+    <button class="btn icon" id="rot0" title="بازگشت به حالت اصلی">اصلی</button>
+   </div>
+   <span class="sp"></span>
+   <div class="opts">
+    <label title="رنگ‌آمیزی اصلاح‌ها و موارد مشکوک"><input type="checkbox" id="hl" checked>هایلایت</label>
+    <label><input type="checkbox" id="showImg" checked>تصویر اصلی</label>
+    <span title="اندازه‌ی متن (+ / -)">متن <button class="btn icon" id="fsM" aria-label="کوچک‌تر">A−</button><b id="fsV">16</b><button class="btn icon" id="fsP" aria-label="بزرگ‌تر">A+</button></span>
+    <button class="btn" id="copyBtn">کپی متن</button>
+    <button class="btn" id="focusBtn" title="مخفی کردن همه جز تصویر و متن (F)">حالت تمرکز</button>
+   </div>
+  </div>
+  <div class="strip" id="strip"></div>
+  <div class="grid">
+   <div class="col" id="imgcol"><h3>تصویر اصلی <input type="range" id="zoom" min="40" max="250" value="100" aria-label="اندازه‌ی تصویر" style="margin-inline-start:auto;width:90px"></h3><div class="scroll imgwrap" id="img"></div></div>
+   <div class="col"><h3 id="paneAH"></h3><div class="scroll content" id="paneA"></div></div>
+  </div>
+ </section>
+</main>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent);
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const S={tab:'overview',doc:0,page:0,sort:'name',dir:1,q:'',hl:true,img:true,zoom:100,fs:16,focus:false};
+let ROT={};
+try{const v=JSON.parse(localStorage.getItem('ocrdash-view')||'{}');if(v.fs)S.fs=v.fs;if(v.img===false)S.img=false}catch(e){}
+try{ROT=JSON.parse(localStorage.getItem('ocrdash-rot')||'{}')||{}}catch(e){ROT={}}
+function applyView(){
+  document.body.style.setProperty('--fs',S.fs+'px');
+  document.body.classList.toggle('noimg',!S.img);document.body.classList.toggle('nohl',!S.hl);document.body.classList.toggle('focus',S.focus);
+  $('#showImg').checked=S.img;$('#hl').checked=S.hl;$('#fsV').textContent=S.fs;
+  $('#focusBtn').textContent=S.focus?'خروج از تمرکز':'حالت تمرکز';
+  try{localStorage.setItem('ocrdash-view',JSON.stringify({fs:S.fs,img:S.img}))}catch(e){}
+}
+const setFs=d=>{S.fs=Math.min(30,Math.max(12,S.fs+d));applyView()};
+const sum=(d,k)=>d.pages.reduce((a,p)=>a+(p.stats[k]||0),0);
+const num=(n,hi)=>`<span class="badge ${n?(hi?'bad':'warn'):'neutral'}">${n}</span>`;
+const rotKey=()=>D.docs[S.doc].name+':'+D.docs[S.doc].pages[S.page].page;
+const curRot=()=>ROT[rotKey()]||0;
+
+function renderOverview(){
+  const rows=D.docs.map((d,i)=>({i,d,words:sum(d,'words'),tables:sum(d,'tables'),corr:sum(d,'corr'),rev:sum(d,'rev'),low:sum(d,'low')}));
+  const key={name:r=>r.d.name.toLowerCase(),pages:r=>r.d.pages.length,time:r=>r.d.time,words:r=>r.words,tables:r=>r.tables,corr:r=>r.corr,rev:r=>r.rev,low:r=>r.low,mis:r=>r.d.mismatch}[S.sort];
+  const shown=rows.filter(r=>!S.q||r.d.name.toLowerCase().includes(S.q.toLowerCase())).sort((x,y)=>{const a=key(x),b=key(y);return (a<b?-1:a>b?1:0)*S.dir});
+  const pages=D.docs.reduce((a,d)=>a+d.pages.length,0),time=D.docs.reduce((a,d)=>a+d.time,0),tot=k=>rows.reduce((a,r)=>a+r[k],0);
+  const card=(l,v,h)=>`<div class="card"><span>${l}</span><b>${v}</b><small>${h}</small></div>`;
+  const th=(k,l,t)=>`<th data-k="${k}" title="${t}">${l}${S.sort===k?(S.dir>0?' ▲':' ▼'):''}</th>`;
+  $('#ovin').innerHTML=`
+   <div class="pagehead"><h2>تصویر اصلی و خروجی مدل</h2><p>روی هر سند بزن تا هر صفحه را کنار تصویر اصلی‌اش ببینی. تصویر را می‌شود چرخاند.</p></div>
+   <div class="notice"><b>نکته:</b><ul>
+    <li>رنگ‌ها <b>وضعیت اطمینان</b> مدل را نشان می‌دهند، نه درستی متن؛ درستی را با چشم و با تصویر بسنج.</li>
+    <li>دیکشنری سازمان ${D.lexicon?'<b>روشن</b> است':'خاموش است'}.</li></ul></div>
+   <div class="cards">
+    ${card('اسناد',D.docs.length,pages+' صفحه')}
+    ${card('واژه‌ی استخراج‌شده',tot('words').toLocaleString('en'),tot('tables')+' جدول')}
+    ${card('اصلاح خودکار',tot('corr'),'کد ملی، تاریخ، معادله')}
+    ${card('مرور انسانی',tot('rev'),'شناسه‌های مبهم که حدس زده نشد')}
+    ${card('خط کم‌اطمینان',tot('low'),'اطمینان کمتر از ۰٫۷۵')}
+    ${card('زمان کل',time.toFixed(0)+' ثانیه',(time/Math.max(pages,1)).toFixed(1)+' ثانیه برای هر صفحه')}
+   </div>
+   <div class="legend"><strong>راهنمای رنگ‌ها در متن</strong>
+    <span><i class="sw fix"></i>سبز: اصلاح خودکار</span>
+    <span><i class="sw rev"></i>نارنجی: نیازمند مرور انسانی</span>
+    <span><i class="sw low"></i>خط کم‌اطمینان</span></div>
+   <div class="tools"><input type="search" id="q" placeholder="جست‌وجوی سند…" value="${esc(S.q)}" aria-label="جست‌وجوی سند"><span class="sp"></span><span class="mut">${shown.length} از ${rows.length} سند</span></div>
+   <div class="tblwrap"><table class="ov"><thead><tr>
+    ${th('name','سند','مرتب‌سازی با نام')}${th('pages','صفحه','تعداد صفحه')}${th('time','زمان','ثانیه')}${th('words','واژه','تعداد واژه')}${th('tables','جدول','تعداد جدول')}
+    ${th('corr','اصلاح خودکار','تعداد')}${th('rev','مرور انسانی','تعداد')}${th('low','کم‌اطمینان','خطوط')}${th('mis','فاکتور ✗','ناهماهنگی معادلات')}<th></th></tr></thead><tbody>
+    ${shown.map(r=>`<tr class="r" data-i="${r.i}"><td class="name">${esc(r.d.name)}</td><td>${r.d.pages.length}</td><td><span class="num">${r.d.time}</span></td>
+     <td><span class="num">${r.words}</span></td><td>${r.tables}</td>
+     <td>${num(r.corr)}</td><td>${num(r.rev,1)}</td><td>${num(r.low)}</td><td>${num(r.d.mismatch,1)}</td>
+     <td><button class="btn primary">باز کن</button></td></tr>`).join('')}</tbody></table>
+    ${shown.length?'':'<div class="none">سندی پیدا نشد.</div>'}</div>`;
+  $$('#ovin th[data-k]').forEach(h=>h.onclick=()=>{const k=h.dataset.k;if(S.sort===k)S.dir*=-1;else{S.sort=k;S.dir=k==='name'?1:-1}renderOverview()});
+  $$('#ovin tr.r').forEach(r=>r.onclick=()=>{S.doc=+r.dataset.i;S.page=D.docs[S.doc].focus||0;setTab('viewer')});
+  $('#q').oninput=e=>{S.q=e.target.value;const p=e.target.selectionStart;renderOverview();const q=$('#q');q.focus();q.setSelectionRange(p,p)};
+}
+
+function layoutImage(){
+  const box=$('#img'),wrap=$('#rotbox'),im=wrap&&wrap.querySelector('img');
+  if(!im)return;
+  const p=D.docs[S.doc].pages[S.page],rot=curRot(),swap=rot%180!==0;
+  const nw=p.size[0],nh=p.size[1],vw=swap?nh:nw,vh=swap?nw:nh;
+  const avail=Math.max(120,(box.clientWidth||700)-26);
+  const scale=avail*S.zoom/100/vw;
+  wrap.style.width=Math.round(vw*scale)+'px';wrap.style.height=Math.round(vh*scale)+'px';
+  im.style.width=Math.round(nw*scale)+'px';im.style.height=Math.round(nh*scale)+'px';
+  im.style.transform=`translate(-50%,-50%) rotate(${rot}deg)`;
+  $('#rotLabel').textContent=rot+'°';
+}
+function rotate(delta){
+  const v=((curRot()+delta)%360+360)%360;
+  if(v)ROT[rotKey()]=v;else delete ROT[rotKey()];
+  try{localStorage.setItem('ocrdash-rot',JSON.stringify(ROT))}catch(e){}
+  layoutImage();
+}
+function setRotation(v){ROT[rotKey()]=v;rotate(0)}
+
+function chip(label,v,bad){return `<span class="chip ${bad&&v?'bad':''}">${label}<b>${v==null?'–':v}</b></span>`}
+function renderViewer(){
+  const d=D.docs[S.doc];if(S.page>=d.pages.length)S.page=0;
+  const p=d.pages[S.page],st=p.stats;
+  $('#docSel').innerHTML=D.docs.map((x,i)=>`<option value="${i}" ${i===S.doc?'selected':''}>${esc(x.name)}</option>`).join('');
+  $('#pageSel').innerHTML=d.pages.map((x,i)=>`<option value="${i}" ${i===S.page?'selected':''}>صفحه ${x.page} از ${d.pages.length}</option>`).join('');
+  $('#img').innerHTML=`<div class="rotbox" id="rotbox"><img src="data:image/jpeg;base64,${p.image}" alt="صفحه ${p.page} از ${esc(d.name)}"></div>`;
+  layoutImage();
+  $('#paneAH').innerHTML=`خروجی مدل <small>${esc(d.file)} — صفحه ${p.page}</small>`;
+  const more=(p.notes?`<details class="more"><summary>اصلاح‌ها، موارد مشکوک و خطوط کم‌اطمینان</summary>${p.notes}</details>`:'')+(p.invoice?`<details class="more"><summary>فاکتور ساختاریافته</summary>${p.invoice}</details>`:'');
+  $('#paneA').innerHTML=(p.html||'<div class="empty">این صفحه متنی نداشت.</div>')+more;
+  $('#strip').innerHTML=chip('واژه',st.words)+chip('جدول',st.tables)+chip('اصلاح خودکار',st.corr)+chip('مرور انسانی',st.rev,1)+chip('کم‌اطمینان',st.low,1);
+  $('#paneA').scrollTop=0;$('#img').scrollTop=0;
+}
+function setTab(t){
+  S.tab=t;if(t!=='viewer'&&S.focus){S.focus=false;applyView()}
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+  $('#overview').style.display=t==='overview'?'block':'none';$('#viewer').style.display=t==='viewer'?'flex':'none';
+  $('#tabO').classList.toggle('on',t==='overview');$('#tabV').classList.toggle('on',t==='viewer');
+  t==='overview'?renderOverview():renderViewer();
+}
+const go=n=>{const c=D.docs[S.doc].pages.length;S.page=Math.min(c-1,Math.max(0,S.page+n));renderViewer()};
+const goDoc=n=>{S.doc=(S.doc+n+D.docs.length)%D.docs.length;S.page=D.docs[S.doc].focus||0;renderViewer()};
+$('#tabO').onclick=()=>setTab('overview');$('#tabV').onclick=()=>setTab('viewer');$('#back').onclick=()=>setTab('overview');
+$('#docSel').onchange=e=>{S.doc=+e.target.value;S.page=D.docs[S.doc].focus||0;renderViewer()};
+$('#pageSel').onchange=e=>{S.page=+e.target.value;renderViewer()};
+$('#prevPg').onclick=()=>go(-1);$('#nextPg').onclick=()=>go(1);$('#prevDoc').onclick=()=>goDoc(-1);$('#nextDoc').onclick=()=>goDoc(1);
+$('#rotL').onclick=()=>rotate(-90);$('#rotR').onclick=()=>rotate(90);$('#rot180').onclick=()=>rotate(180);$('#rot0').onclick=()=>setRotation(0);
+$('#hl').onchange=e=>{S.hl=e.target.checked;applyView()};
+$('#showImg').onchange=e=>{S.img=e.target.checked;applyView()};
+$('#fsM').onclick=()=>setFs(-1);$('#fsP').onclick=()=>setFs(1);
+$('#focusBtn').onclick=()=>{S.focus=!S.focus;applyView()};
+$('#zoom').oninput=e=>{S.zoom=+e.target.value;layoutImage()};
+window.addEventListener('resize',()=>{if(S.tab==='viewer')layoutImage()});
+$('#copyBtn').onclick=()=>{const t=$('#paneA').innerText;if(navigator.clipboard)navigator.clipboard.writeText(t);const b=$('#copyBtn');b.textContent='کپی شد ✓';setTimeout(()=>b.textContent='کپی متن',1200)};
+document.addEventListener('keydown',e=>{
+  const a=document.activeElement;
+  if(S.tab!=='viewer'||a.tagName==='SELECT'||a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&['text','search','range'].includes(a.type))||e.ctrlKey||e.metaKey||e.altKey)return;
+  const k=e.key.toLowerCase();
+  if(k==='arrowleft')go(1);else if(k==='arrowright')go(-1);else if(k==='n')goDoc(1);else if(k==='p')goDoc(-1);
+  else if(k==='r')rotate(e.shiftKey?-90:90);
+  else if(k==='f'){S.focus=!S.focus;applyView()}else if(k==='+'||k==='=')setFs(1);else if(k==='-')setFs(-1);
+});
+$('#gen').textContent='ساخته‌شده: '+D.generated;
+applyView();setTab('overview');
+</script></body></html>

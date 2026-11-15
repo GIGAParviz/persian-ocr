@@ -1,0 +1,11 @@
+# Pinned dependencies (Python 3.12, CPU only): OCR, evaluation (rapidfuzz) and the HTTP API with its tests (fastapi, uvicorn, python-multipart, httpx).
+indra-ocr==1.1.2
+onnxruntime==1.20.1
+numpy==1.26.4
+opencv-python-headless==5.0.0.93
+pypdfium2==5.14.0
+rapidfuzz==3.14.6
+fastapi==0.162.0
+uvicorn==0.54.0
+python-multipart==0.0.33
+httpx==0.28.1

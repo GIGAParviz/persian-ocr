@@ -1,0 +1,145 @@
+<!-- Number error gallery template: evaluation/errors.py replaces the data placeholder with the rows JSON. -->
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>گالری اعداد اشتباه</title>
+<style>
+:root{
+  --bg:#f3f5f8;--panel:#fff;--panel2:#f8f9fb;--text:#172033;--mut:#5d6879;--faint:#8a93a3;--bd:#dfe3ea;--bd2:#cdd3dd;
+  --acc:#1f5eff;--accbg:#e8efff;--good:#12805a;--goodbg:#dff4ea;--warn:#9a5b00;--warnbg:#fff0d3;--bad:#bf2a2a;--badbg:#fde3e3;--mark:#ffe27a;
+  --sh:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.04);
+  --ui:Vazirmatn,"Segoe UI",Tahoma,system-ui,sans-serif;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#12151b;--panel:#1a1e26;--panel2:#20252e;--text:#e6e9ef;--mut:#a0a9b8;--faint:#7b8494;--bd:#2c323d;--bd2:#3a4150;
+  --acc:#7da0ff;--accbg:#222c4a;--good:#46c48d;--goodbg:#173a2b;--warn:#f0b04a;--warnbg:#3d2f10;--bad:#f27a7a;--badbg:#44201f;--mark:#7a6300}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.6 var(--ui);background:var(--bg);color:var(--text)}
+button,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--bd)}
+.brand{font-size:16px;font-weight:700}
+.sp{flex:1}
+.mut{color:var(--mut)}
+.wrap{max-width:1200px;margin:0 auto;padding:18px}
+.notice{background:var(--warnbg);color:var(--warn);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px}
+.notice ul{margin:4px 0 0;padding-inline-start:20px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:10px 14px;box-shadow:var(--sh)}
+.card span{display:block;color:var(--mut);font-size:12px}
+.card b{font-size:22px}
+.filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.chipbtn{border:1px solid var(--bd2);background:var(--panel);border-radius:99px;padding:3px 12px;cursor:pointer;font-size:13px}
+.chipbtn.on{background:var(--accbg);border-color:var(--acc);color:var(--acc);font-weight:600}
+.sel{border:1px solid var(--bd2);background:var(--panel);border-radius:6px;padding:4px 8px}
+.btn{border:1px solid var(--bd2);background:var(--panel);border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--acc);color:var(--acc)}
+article.row{display:flex;gap:14px;background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px;box-shadow:var(--sh)}
+article.row.v-ocr{border-inline-start:5px solid var(--bad)}
+article.row.v-gt{border-inline-start:5px solid var(--good)}
+article.row.v-image{border-inline-start:5px solid var(--warn)}
+.img{flex:0 0 52%;min-width:0;background:var(--panel2);border:1px solid var(--bd);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:auto;min-height:90px}
+.img img{display:block;max-width:100%;height:auto}
+.noimg{color:var(--mut);font-size:13px;padding:14px;text-align:center}
+.info{flex:1;min-width:0}
+.meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.badge{display:inline-block;padding:1px 10px;border-radius:99px;font-size:12px;font-weight:600;background:var(--badbg);color:var(--bad)}
+.badge.where{background:var(--bd);color:var(--mut);font-weight:500}
+.nums{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:6px 0}
+.nums code{direction:ltr;unicode-bidi:embed;font-size:18px;letter-spacing:.5px;background:rgba(127,127,127,.12);padding:0 6px;border-radius:4px;display:inline-block}
+mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
+.ctx{color:var(--mut);font-size:13px;margin:4px 0 8px}
+.verdicts{display:flex;gap:6px;flex-wrap:wrap}
+.verdicts button{border:1px solid var(--bd2);background:var(--panel);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:13px}
+.verdicts button.on[data-v=ocr]{background:var(--badbg);border-color:var(--bad);color:var(--bad)}
+.verdicts button.on[data-v=gt]{background:var(--goodbg);border-color:var(--good);color:var(--good)}
+.verdicts button.on[data-v=image]{background:var(--warnbg);border-color:var(--warn);color:var(--warn)}
+.empty{padding:40px;text-align:center;color:var(--mut)}
+@media(max-width:800px){article.row{flex-direction:column}.img{flex-basis:auto}}
+</style></head><body>
+<header>
+ <div class="brand">گالری اعداد اشتباه</div>
+ <span class="mut" id="gen"></span>
+ <span class="sp"></span>
+ <span id="tally" class="mut"></span>
+ <button class="btn" id="copy">کپی قضاوت‌ها (JSON)</button>
+ <button class="btn" id="clear">پاک کردن قضاوت‌ها</button>
+</header>
+<div class="wrap">
+ <div class="notice"><b>چطور بخوانی:</b><ul>
+  <li>کادر قرمز روی برش، محل خوانش ماست. «محل تقریبی از روی برچسب» یعنی خود عدد پیدا نشد و فقط خط برچسب‌دارش نشان داده شده؛ عدد را در همان ناحیه بگرد.</li>
+  <li>برای هر مورد بگو: <b>OCR اشتباه</b> است، <b>GT اشتباه</b> است، یا <b>تصویر نامفهوم</b>. با «کپی قضاوت‌ها» می‌توانی همه را برای من بفرستی.</li>
+  <li>برش‌ها از تصویر هم‌جهت‌شده‌ی OCR گرفته شده‌اند (ممکن است با PDF اصلی ۹۰ یا ۱۸۰ درجه فرق کنند).</li></ul></div>
+ <div class="cards" id="cards"></div>
+ <div class="filters" id="filters"></div>
+ <div id="list"></div>
+</div>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent);
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const S={kind:'all',doc:'all',verdict:'all'};
+let V={};
+try{V=JSON.parse(localStorage.getItem('ocrerr-verdicts')||'{}')||{}}catch(e){V={}}
+const LABEL={ocr:'OCR اشتباه',gt:'GT اشتباه',image:'تصویر نامفهوم'};
+const save=()=>{try{localStorage.setItem('ocrerr-verdicts',JSON.stringify(V))}catch(e){}};
+function tally(){
+  const c={ocr:0,gt:0,image:0};D.rows.forEach(r=>{if(V[r.id])c[V[r.id]]++});
+  const done=c.ocr+c.gt+c.image;
+  $('#tally').textContent=`قضاوت‌شده ${done} از ${D.rows.length} — OCR ${c.ocr} · GT ${c.gt} · نامفهوم ${c.image}`;
+}
+function renderCards(){
+  const s=D.summary;
+  $('#cards').innerHTML=`<div class="card"><span>اعداد اشتباه</span><b>${s.total}</b></div>
+   <div class="card"><span>با محل مشخص</span><b>${s.located}</b></div>`+
+   Object.keys(D.kinds).map(k=>`<div class="card"><span>${D.kinds[k]}</span><b>${s.by_kind[k]||0}</b></div>`).join('');
+}
+function renderFilters(){
+  const kinds=['all',...Object.keys(D.kinds).filter(k=>(D.summary.by_kind[k]||0)>0)];
+  $('#filters').innerHTML=kinds.map(k=>`<button class="chipbtn ${S.kind===k?'on':''}" data-k="${k}">${k==='all'?'همه':D.kinds[k]}</button>`).join('')+
+   `<span class="sp"></span><select class="sel" id="docSel" aria-label="سند"><option value="all">همه‌ی اسناد</option>${Object.keys(D.summary.by_doc).map(d=>`<option value="${esc(d)}" ${S.doc===d?'selected':''}>${esc(d)} (${D.summary.by_doc[d]})</option>`).join('')}</select>`+
+   `<select class="sel" id="verSel" aria-label="قضاوت">${[['all','همه'],['none','بدون قضاوت'],['ocr',LABEL.ocr],['gt',LABEL.gt],['image',LABEL.image]].map(([v,l])=>`<option value="${v}" ${S.verdict===v?'selected':''}>${l}</option>`).join('')}</select>`;
+  $$('#filters .chipbtn').forEach(b=>b.onclick=()=>{S.kind=b.dataset.k;renderFilters();renderList()});
+  $('#docSel').onchange=e=>{S.doc=e.target.value;renderList()};
+  $('#verSel').onchange=e=>{S.verdict=e.target.value;renderList()};
+}
+function visible(r){
+  if(S.kind!=='all'&&r.kind!==S.kind)return false;
+  if(S.doc!=='all'&&r.doc!==S.doc)return false;
+  const v=V[r.id]||'none';
+  return S.verdict==='all'||S.verdict===v;
+}
+function card(r){
+  const v=V[r.id]||'';
+  const img=r.crop?`<img src="data:image/jpeg;base64,${r.crop}" alt="برش عدد ${esc(r.gt)}">`:'<div class="noimg">محل عدد پیدا نشد؛ برش ندارد</div>';
+  return `<article class="row ${v?'v-'+v:''}" data-id="${esc(r.id)}">
+   <div class="img">${img}</div>
+   <div class="info">
+    <div class="meta"><b>${esc(r.doc)}</b>${r.page?`<span class="mut">صفحه ${r.page}</span>`:''}<span class="badge">${esc(r.kind_label)}</span><span class="badge where">${esc(r.where_label)}</span></div>
+    <div class="nums"><span class="mut">GT</span><code>${r.gt_html}</code><span class="mut">OCR</span><code>${r.ocr?r.ocr_html:'—'}</code></div>
+    ${r.context?`<div class="ctx">خط GT: ${esc(r.context)}</div>`:''}
+    <div class="verdicts">${Object.keys(LABEL).map(k=>`<button data-v="${k}" class="${v===k?'on':''}">${LABEL[k]}</button>`).join('')}</div>
+   </div></article>`;
+}
+function renderList(){
+  const rows=D.rows.filter(visible);
+  $('#list').innerHTML=rows.length?rows.map(card).join(''):'<div class="empty">موردی با این فیلتر نیست.</div>';
+  $$('#list article.row').forEach(a=>{
+    [...a.querySelectorAll('.verdicts button')].forEach(b=>b.onclick=()=>{
+      const id=a.dataset.id;
+      if(V[id]===b.dataset.v)delete V[id];else V[id]=b.dataset.v;
+      save();tally();
+      if(S.verdict!=='all'){renderList()}else{a.className='row '+(V[id]?'v-'+V[id]:'');[...a.querySelectorAll('.verdicts button')].forEach(x=>x.classList.toggle('on',V[id]===x.dataset.v))}
+    });
+  });
+}
+$('#copy').onclick=()=>{
+  const out=D.rows.filter(r=>V[r.id]).map(r=>({doc:r.doc,gt:r.gt,ocr:r.ocr,kind:r.kind,verdict:V[r.id]}));
+  const text=JSON.stringify(out,null,1);
+  if(navigator.clipboard)navigator.clipboard.writeText(text);
+  const b=$('#copy');b.textContent=`کپی شد ✓ (${out.length})`;setTimeout(()=>b.textContent='کپی قضاوت‌ها (JSON)',1500);
+};
+$('#clear').onclick=()=>{if(confirm('همه‌ی قضاوت‌ها پاک شود؟')){V={};save();tally();renderList()}};
+$('#gen').textContent='ساخته‌شده: '+D.generated;
+renderCards();renderFilters();renderList();tally();
+</script></body></html>

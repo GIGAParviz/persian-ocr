@@ -1,0 +1,58 @@
+name: docker
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unit tests (model-dependent tests skip themselves)
+        run: |
+          python -m pip install --no-deps -r requirements.lock
+          python -m unittest discover -s tests -t .
+
+      - name: Build image
+        run: docker build -t persian-ocr:ci .
+
+      - name: Smoke test the running container
+        run: |
+          docker run -d --name ocr -p 8000:8000 persian-ocr:ci
+          state=""
+          for i in $(seq 1 60); do
+            state=$(docker inspect -f '{{.State.Status}} {{.State.Health.Status}}' ocr)
+            echo "$state"
+            [ "$state" = "running healthy" ] && break
+            case "$state" in exited*) docker logs ocr; exit 1;; esac
+            sleep 5
+          done
+          [ "$state" = "running healthy" ] || { docker logs ocr; exit 1; }
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/app)" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/docs)" = "200"
+          curl -sf -F "file=@deploy/test-invoice.png" "http://127.0.0.1:8000/ocr/text?lexicon=false" -o out.json
+          curl -sf -F "file=@deploy/test-invoice.png" "http://127.0.0.1:8000/ocr/text?lexicon=false&tables=false" -o out_notables.json
+          python3 -c "import json; a=json.load(open('out.json'))['text']; b=json.load(open('out_notables.json'))['text']; print(len(a), len(b)); assert len(a) > 200 and len(b) > 200"
+          docker logs ocr | tail -n 20
+
+      - name: Push to GitHub Container Registry
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          IMAGE=ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker tag persian-ocr:ci "$IMAGE:latest"
+          docker tag persian-ocr:ci "$IMAGE:0.2.0"
+          docker tag persian-ocr:ci "$IMAGE:sha-${GITHUB_SHA::7}"
+          docker push --all-tags "$IMAGE"

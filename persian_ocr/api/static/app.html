@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>آزمون OCR فارسی</title>
+<style>
+:root{
+  --bg:#f3f5f8;--panel:#fff;--panel2:#f8f9fb;--text:#172033;--mut:#5d6879;--faint:#8a93a3;--bd:#dfe3ea;--bd2:#cdd3dd;
+  --acc:#1f5eff;--accbg:#e8efff;--good:#12805a;--goodbg:#dff4ea;--warn:#9a5b00;--warnbg:#fff0d3;--bad:#bf2a2a;--badbg:#fde3e3;
+  --fixbg:#c9efd9;--revbg:#ffd9a0;--lowbg:#fff4f4;
+  --sh:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.04);
+  --ui:Vazirmatn,"Segoe UI",Tahoma,system-ui,sans-serif;--fa:Vazirmatn,Tahoma,"Noto Naskh Arabic",sans-serif;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#12151b;--panel:#1a1e26;--panel2:#20252e;--text:#e6e9ef;--mut:#a0a9b8;--faint:#7b8494;--bd:#2c323d;--bd2:#3a4150;
+  --acc:#7da0ff;--accbg:#222c4a;--good:#46c48d;--goodbg:#173a2b;--warn:#f0b04a;--warnbg:#3d2f10;--bad:#f27a7a;--badbg:#44201f;
+  --fixbg:#1d5a3a;--revbg:#7a4d12;--lowbg:#3a2224}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.6 var(--ui);background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+header{display:flex;align-items:center;gap:14px;padding:0 16px;min-height:52px;background:var(--panel);border-bottom:1px solid var(--bd);flex:none;flex-wrap:wrap}
+.brand{font-size:16px;font-weight:700}
+.sp{flex:1}
+.btn{border:1px solid var(--bd2);background:var(--panel);border-radius:6px;padding:4px 11px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--acc);color:var(--acc)}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.primary:hover{color:#fff;opacity:.9}
+.btn.icon{padding:4px 9px}
+.sel,.inp{border:1px solid var(--bd2);background:var(--panel);border-radius:6px;padding:4px 8px}
+.inp.num{width:64px;direction:ltr;text-align:center}
+.mut{color:var(--mut)}
+.opts{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.opts label{display:inline-flex;gap:6px;align-items:center;cursor:pointer;color:var(--mut);white-space:nowrap}
+.pill{display:inline-block;padding:1px 10px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--bd);color:var(--mut)}
+.pill.ok{background:var(--goodbg);color:var(--good)}.pill.warn{background:var(--warnbg);color:var(--warn)}.pill.bad{background:var(--badbg);color:var(--bad)}
+main{flex:1;min-height:0;display:flex;flex-direction:column}
+#queue{display:none;gap:6px;padding:6px 14px;background:var(--panel2);border-bottom:1px solid var(--bd);overflow-x:auto;flex:none}
+.item{display:flex;align-items:center;gap:8px;border:1px solid var(--bd2);background:var(--panel);border-radius:8px;padding:3px 10px;cursor:pointer;white-space:nowrap;max-width:300px}
+.item.on{border-color:var(--acc);background:var(--accbg)}
+.item .nm{overflow:hidden;text-overflow:ellipsis;max-width:170px}
+.item .x{border:0;background:none;cursor:pointer;color:var(--faint);padding:0 2px}
+.item .x:hover{color:var(--bad)}
+#empty{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}
+.drop{max-width:620px;width:100%;border:2px dashed var(--bd2);border-radius:14px;background:var(--panel);padding:44px 28px;text-align:center;box-shadow:var(--sh)}
+.drop.over,body.dragging .drop{border-color:var(--acc);background:var(--accbg)}
+.drop h2{margin:0 0 8px;font-size:21px}
+.drop p{margin:6px 0;color:var(--mut)}
+.drop ul{text-align:start;display:inline-block;color:var(--mut);margin:8px 0 14px;padding-inline-start:20px;font-size:13px}
+.state{flex:1;display:none;align-items:center;justify-content:center;padding:24px}
+.statebox{max-width:560px;background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:26px 30px;text-align:center;box-shadow:var(--sh)}
+.statebox.err{border-color:var(--bad);background:var(--badbg)}
+.spin{width:30px;height:30px;border:4px solid var(--bd2);border-top-color:var(--acc);border-radius:50%;margin:0 auto 12px;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#viewer{display:none;flex:1;min-height:0;flex-direction:column}
+.toolbar{display:flex;gap:10px;align-items:center;padding:6px 14px;flex-wrap:wrap;border-bottom:1px solid var(--bd);background:var(--panel);flex:none}
+.group{display:flex;align-items:center;gap:4px}
+.vdiv{width:1px;height:24px;background:var(--bd)}
+.strip{padding:5px 14px;border-bottom:1px solid var(--bd);background:var(--panel2);display:flex;gap:6px 18px;align-items:center;flex-wrap:wrap;flex:none;font-size:13px}
+.strip .chip b{margin-inline-start:4px}
+.strip .chip.bad b{color:var(--bad)}
+.grid{flex:1;min-height:0;display:flex;gap:10px;padding:10px 14px}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden;box-shadow:var(--sh)}
+.col>h3{margin:0;padding:8px 14px;font-size:14px;border-bottom:1px solid var(--bd);background:var(--panel2);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.col>h3 small{font-weight:400;color:var(--mut);font-size:12px}
+.scroll{flex:1;overflow:auto;padding:12px}
+.imgwrap{background:var(--panel2)}
+.rotbox{position:relative;margin:0 auto}
+.rotbox img{position:absolute;left:50%;top:50%;display:block;max-width:none;border:1px solid var(--bd);background:#fff}
+.rotlabel{direction:ltr;min-width:38px;text-align:center;font-weight:600}
+.content{font-family:var(--fa);font-size:var(--fs,16px);line-height:1.9}
+.content .l{padding:0 2px}
+.content .l.low{background:var(--lowbg);border-inline-start:3px solid var(--warn);padding-inline-start:8px}
+.content .sup{margin:10px 0 4px;padding-top:6px;border-top:1px dashed var(--bd2);color:var(--mut);font-size:.85em}
+.content table.t{border-collapse:collapse;margin:6px 0;width:100%;font-size:.92em;line-height:1.7}
+.content td{border:1px solid var(--bd2);padding:3px 8px;vertical-align:top}
+.w.fix{background:var(--fixbg);border-radius:3px}
+.w.rev{background:var(--revbg);border-radius:3px}
+body.nohl .w{background:none!important}
+body.nohl .l.low{background:none;border:0}
+.empty{padding:28px 18px;color:var(--mut);text-align:center}
+details.more{margin-top:12px;border:1px solid var(--bd);border-radius:8px;padding:6px 10px;font-family:var(--ui);font-size:13px;line-height:1.6}
+details.more summary{cursor:pointer;font-weight:600}
+.box{border-radius:6px;padding:8px 10px;margin:8px 0;font-size:13px}
+.box.fix{background:var(--goodbg)}.box.rev{background:var(--warnbg)}.box.low{background:var(--badbg)}.box.inv{background:var(--panel2);border:1px solid var(--bd2)}
+.box ul{margin:4px 0;padding-inline-start:20px}
+code{direction:ltr;unicode-bidi:embed;background:rgba(127,127,127,.15);padding:0 4px;border-radius:3px}
+body.noimg #imgcol{display:none}
+body.focus header,body.focus .strip,body.focus #queue{display:none}
+@media(max-width:1000px){.grid{flex-direction:column;overflow:auto}.col{min-height:60vh}}
+</style></head><body>
+<header>
+ <div class="brand">آزمون OCR فارسی</div>
+ <button class="btn primary" id="pick">انتخاب فایل…</button>
+ <input type="file" id="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,image/*,application/pdf" hidden>
+ <div class="opts">
+  <label title="دیکشنری موجودیت‌های سازمان را اعمال می‌کند. برای سنجش دقت واقعی خاموش بماند."><input type="checkbox" id="lex">دیکشنری سازمان</label>
+  <label title="استخراج جدول و فاکتور؛ برای آزمون بدون جدول خاموش کن."><input type="checkbox" id="tbl" checked>جدول و فاکتور</label>
+  <label title="۰ یعنی همه‌ی صفحه‌ها">حداکثر صفحه <input class="inp num" type="number" id="maxp" min="0" max="500" value="0"></label>
+  <label id="keyLabel" style="display:none">کلید API <input class="inp" type="password" id="key" style="width:140px;direction:ltr"></label>
+ </div>
+ <span class="sp"></span>
+ <span class="pill" id="health">…</span>
+ <a class="btn" href="/docs" target="_blank" rel="noopener">Swagger</a>
+</header>
+<main>
+ <div id="queue"></div>
+ <section id="empty">
+  <div class="drop" id="drop">
+   <h2>تصویر یا PDF خودت را بینداز اینجا</h2>
+   <p>چند فایل را هم‌زمان می‌شود انداخت؛ یکی‌یکی پردازش می‌شوند.</p>
+   <ul>
+    <li>قالب‌ها: PDF، PNG، JPG، TIFF، BMP، WEBP</li>
+    <li>روی CPU است: چند ثانیه برای هر صفحه، و بار اول چند ده ثانیه برای بارگذاری مدل</li>
+    <li>فایل بعد از پردازش پاک می‌شود و جایی ذخیره نمی‌ماند</li>
+   </ul><br>
+   <button class="btn primary" id="pick2">انتخاب فایل…</button>
+  </div>
+ </section>
+ <section class="state" id="busy"><div class="statebox"><div class="spin"></div><b id="busyT"></b><p class="mut" id="busyS" style="margin:6px 0 0"></p></div></section>
+ <section class="state" id="err"><div class="statebox err"><b>پردازش این فایل ناموفق بود</b><p id="errT" style="margin:8px 0 0"></p></div></section>
+ <section id="viewer">
+  <div class="toolbar">
+   <div class="group"><button class="btn icon" id="prevPg" title="صفحه‌ی قبلی (→)">›</button><select class="sel" id="pageSel" aria-label="صفحه"></select><button class="btn icon" id="nextPg" title="صفحه‌ی بعدی (←)">‹</button></div>
+   <span class="vdiv"></span>
+   <div class="group" role="group" aria-label="چرخش تصویر">
+    <button class="btn icon" id="rotL" title="۹۰ درجه به چپ (Shift+R)">⟲</button>
+    <span class="rotlabel" id="rotLabel">0°</span>
+    <button class="btn icon" id="rotR" title="۹۰ درجه به راست (R)">⟳</button>
+    <button class="btn icon" id="rot180" title="۱۸۰ درجه">⇅</button>
+    <button class="btn icon" id="rot0" title="بازگشت به حالت اصلی">اصلی</button>
+   </div>
+   <span class="sp"></span>
+   <div class="opts">
+    <label title="رنگ‌آمیزی اصلاح‌ها و موارد مشکوک"><input type="checkbox" id="hl" checked>هایلایت</label>
+    <label><input type="checkbox" id="showImg" checked>تصویر اصلی</label>
+    <span>متن <button class="btn icon" id="fsM" aria-label="کوچک‌تر">A−</button><b id="fsV">16</b><button class="btn icon" id="fsP" aria-label="بزرگ‌تر">A+</button></span>
+    <button class="btn" id="copyBtn">کپی متن صفحه</button>
+    <button class="btn" id="dlTxt">دانلود txt</button>
+    <button class="btn" id="dlJson">دانلود json</button>
+    <button class="btn" id="focusBtn" title="مخفی کردن همه جز تصویر و متن (F)">حالت تمرکز</button>
+   </div>
+  </div>
+  <div class="strip" id="strip"></div>
+  <div class="grid">
+   <div class="col" id="imgcol"><h3>تصویر اصلی <input type="range" id="zoom" min="40" max="250" value="100" aria-label="اندازه‌ی تصویر" style="margin-inline-start:auto;width:90px"></h3><div class="scroll imgwrap" id="img"></div></div>
+   <div class="col"><h3 id="paneAH"></h3><div class="scroll content" id="paneA"></div></div>
+  </div>
+ </section>
+</main>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const SUFFIX=/\.(pdf|png|jpe?g|tiff?|bmp|webp)$/i;
+const S={hl:true,img:true,zoom:100,fs:16,focus:false,page:0};
+const Q=[];let cur=-1,uid=0,busy=false,timer=null;
+try{const v=JSON.parse(localStorage.getItem('ocrapp-view')||'{}');if(v.fs)S.fs=v.fs;if(v.img===false)S.img=false;if(v.lex)$('#lex').checked=true;if(v.key)$('#key').value=v.key}catch(e){}
+function applyView(){
+  document.body.style.setProperty('--fs',S.fs+'px');
+  document.body.classList.toggle('noimg',!S.img);document.body.classList.toggle('nohl',!S.hl);document.body.classList.toggle('focus',S.focus);
+  $('#showImg').checked=S.img;$('#hl').checked=S.hl;$('#fsV').textContent=S.fs;
+  $('#focusBtn').textContent=S.focus?'خروج از تمرکز':'حالت تمرکز';
+  saveView();
+}
+function saveView(){try{localStorage.setItem('ocrapp-view',JSON.stringify({fs:S.fs,img:S.img,lex:$('#lex').checked,key:$('#key').value}))}catch(e){}}
+const setFs=d=>{S.fs=Math.min(30,Math.max(12,S.fs+d));applyView()};
+const item=()=>Q[cur];
+const rot=()=>{const it=item();return (it&&it.rot&&it.rot[S.page])||0};
+
+function detailOf(j,status){
+  const d=j&&j.detail;
+  if(typeof d==='string')return d;
+  if(Array.isArray(d))return d.map(x=>x.msg||JSON.stringify(x)).join('؛ ');
+  return 'خطای '+status;
+}
+async function pump(){
+  if(busy)return;
+  const it=Q.find(x=>x.status==='wait');
+  if(!it)return;
+  busy=true;it.status='run';it.t0=Date.now();
+  renderQueue();render();
+  try{
+    const fd=new FormData();fd.append('file',it.file);
+    const key=$('#key').value.trim();
+    const q=`lexicon=${$('#lex').checked}&tables=${$('#tbl').checked}&max_pages=${Math.max(0,+$('#maxp').value||0)}`;
+    const r=await fetch('/app/run?'+q,{method:'POST',body:fd,headers:key?{'X-API-Key':key}:{}});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(detailOf(j,r.status));
+    Object.assign(it,{doc:j.doc,txt:j.txt,json:j.json,rot:{},status:'done',sec:(Date.now()-it.t0)/1000});
+    const now=Q[cur];
+    if(!now||now===it||now.status==='wait'||now.status==='run'){cur=Q.indexOf(it);S.page=it.doc.focus||0}
+  }catch(e){
+    it.status='err';it.error=e.message==='Failed to fetch'?'اتصال به سرور برقرار نشد. سرور (run.bat serve) هنوز روشن است؟':e.message;
+  }
+  busy=false;
+  renderQueue();render();pump();
+}
+function addFiles(list){
+  let bad=[];
+  for(const f of list){
+    if(!SUFFIX.test(f.name)){bad.push(f.name);continue}
+    Q.push({id:++uid,file:f,name:f.name,status:'wait'});
+  }
+  if(bad.length)alert('نوع فایل پشتیبانی نمی‌شود:\n'+bad.join('\n'));
+  if(cur<0&&Q.length)cur=0;
+  renderQueue();render();pump();
+}
+function renderQueue(){
+  const el=$('#queue');
+  el.style.display=Q.length?'flex':'none';
+  const st={wait:['در صف','warn'],run:['در حال پردازش','warn'],done:['تمام','ok'],err:['خطا','bad']};
+  el.innerHTML=Q.map((it,i)=>`<div class="item ${i===cur?'on':''}" data-i="${i}" title="${esc(it.name)}"><span class="nm">${esc(it.name)}</span><span class="pill ${st[it.status][1]}">${st[it.status][0]}</span>${it.status==='run'?'':'<button class="x" data-x="'+i+'" aria-label="حذف">✕</button>'}</div>`).join('');
+  $$('#queue .item').forEach(e=>e.onclick=ev=>{
+    const x=ev.target.dataset&&ev.target.dataset.x;
+    if(x!==undefined){Q.splice(+x,1);if(+x<cur)cur--;if(cur>=Q.length)cur=Q.length-1;renderQueue();render();return}
+    cur=+e.dataset.i;S.page=(Q[cur].doc&&Q[cur].doc.focus)||0;renderQueue();render();
+  });
+}
+function show(id){['empty','busy','err','viewer'].forEach(k=>{$('#'+k).style.display=k===id?'flex':'none'})}
+function tick(){
+  const it=item();
+  if(it&&it.status==='run'){
+    const s=Math.round((Date.now()-it.t0)/1000);
+    $('#busyT').textContent='در حال پردازش «'+it.name+'»…';
+    $('#busyS').textContent=s+' ثانیه گذشته'+(s>20?' (بار اول بارگذاری مدل چند ده ثانیه طول می‌کشد)':'');
+  }
+}
+function render(){
+  clearInterval(timer);
+  const it=item();
+  if(!it){show('empty');return}
+  if(it.status==='wait'){show('busy');$('#busyT').textContent='«'+it.name+'» در صف است';$('#busyS').textContent='پردازش فایل‌ها یکی‌یکی انجام می‌شود.';return}
+  if(it.status==='run'){show('busy');tick();timer=setInterval(tick,1000);return}
+  if(it.status==='err'){show('err');$('#errT').textContent=it.name+': '+it.error;return}
+  show('viewer');renderViewer();
+}
+
+function layoutImage(){
+  const box=$('#img'),wrap=$('#rotbox'),im=wrap&&wrap.querySelector('img');
+  if(!im)return;
+  const p=item().doc.pages[S.page],r=rot(),swap=r%180!==0;
+  const nw=p.size[0],nh=p.size[1],vw=swap?nh:nw,vh=swap?nw:nh;
+  const avail=Math.max(120,(box.clientWidth||700)-26);
+  const scale=avail*S.zoom/100/vw;
+  wrap.style.width=Math.round(vw*scale)+'px';wrap.style.height=Math.round(vh*scale)+'px';
+  im.style.width=Math.round(nw*scale)+'px';im.style.height=Math.round(nh*scale)+'px';
+  im.style.transform=`translate(-50%,-50%) rotate(${r}deg)`;
+  $('#rotLabel').textContent=r+'°';
+}
+function rotate(delta){
+  const it=item(),v=((rot()+delta)%360+360)%360;
+  if(v)it.rot[S.page]=v;else delete it.rot[S.page];
+  layoutImage();
+}
+function chip(label,v,bad){return `<span class="chip ${bad&&v?'bad':''}">${label}<b>${v==null?'–':v}</b></span>`}
+function renderViewer(){
+  const it=item(),d=it.doc;
+  if(S.page>=d.pages.length)S.page=0;
+  const p=d.pages[S.page],st=p.stats;
+  $('#pageSel').innerHTML=d.pages.map((x,i)=>`<option value="${i}" ${i===S.page?'selected':''}>صفحه ${x.page} از ${d.pages.length}</option>`).join('');
+  $('#img').innerHTML=`<div class="rotbox" id="rotbox"><img src="data:image/jpeg;base64,${p.image}" alt="صفحه ${p.page} از ${esc(d.name)}"></div>`;
+  layoutImage();
+  $('#paneAH').innerHTML=`خروجی مدل <small>${esc(d.file)} — صفحه ${p.page} — ${it.sec.toFixed(1)} ثانیه</small>`;
+  const more=(p.notes?`<details class="more" open><summary>اصلاح‌ها، موارد مشکوک و خطوط کم‌اطمینان</summary>${p.notes}</details>`:'')+(p.invoice?`<details class="more"><summary>فاکتور ساختاریافته</summary>${p.invoice}</details>`:'');
+  $('#paneA').innerHTML=(p.html||'<div class="empty">این صفحه متنی نداشت.</div>')+more;
+  $('#strip').innerHTML=chip('واژه',st.words)+chip('جدول',st.tables)+chip('اصلاح خودکار',st.corr)+chip('مرور انسانی',st.rev,1)+chip('کم‌اطمینان',st.low,1)+(d.mismatch?chip('فاکتور ✗',d.mismatch,1):'');
+  $('#paneA').scrollTop=0;$('#img').scrollTop=0;
+}
+const go=n=>{const c=item().doc.pages.length;S.page=Math.min(c-1,Math.max(0,S.page+n));renderViewer()};
+function download(ext){
+  const it=item();if(!it||!it.doc)return;
+  const type=ext==='txt'?'text/plain;charset=utf-8':'application/json';
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([it[ext==='txt'?'txt':'json']],{type}));
+  a.download=it.doc.name+'.'+ext;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+$('#pick').onclick=$('#pick2').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{addFiles([...e.target.files]);e.target.value=''};
+let dragDepth=0;
+document.addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;document.body.classList.add('dragging')});
+document.addEventListener('dragleave',e=>{e.preventDefault();if(--dragDepth<=0){dragDepth=0;document.body.classList.remove('dragging')}});
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;document.body.classList.remove('dragging');if(e.dataTransfer&&e.dataTransfer.files.length)addFiles([...e.dataTransfer.files])});
+document.addEventListener('paste',e=>{const fs=[...(e.clipboardData&&e.clipboardData.files||[])].map((f,i)=>f.name&&SUFFIX.test(f.name)?f:new File([f],'clipboard-'+Date.now()+'-'+i+'.png',{type:f.type}));if(fs.length)addFiles(fs)});
+$('#lex').onchange=saveView;$('#key').onchange=saveView;
+$('#pageSel').onchange=e=>{S.page=+e.target.value;renderViewer()};
+$('#prevPg').onclick=()=>go(-1);$('#nextPg').onclick=()=>go(1);
+$('#rotL').onclick=()=>rotate(-90);$('#rotR').onclick=()=>rotate(90);$('#rot180').onclick=()=>rotate(180);$('#rot0').onclick=()=>rotate(-rot());
+$('#hl').onchange=e=>{S.hl=e.target.checked;applyView()};
+$('#showImg').onchange=e=>{S.img=e.target.checked;applyView()};
+$('#fsM').onclick=()=>setFs(-1);$('#fsP').onclick=()=>setFs(1);
+$('#focusBtn').onclick=()=>{S.focus=!S.focus;applyView()};
+$('#zoom').oninput=e=>{S.zoom=+e.target.value;layoutImage()};
+$('#dlTxt').onclick=()=>download('txt');$('#dlJson').onclick=()=>download('json');
+window.addEventListener('resize',()=>{if(item()&&item().status==='done')layoutImage()});
+$('#copyBtn').onclick=()=>{const t=$('#paneA').innerText;if(navigator.clipboard)navigator.clipboard.writeText(t);const b=$('#copyBtn');b.textContent='کپی شد ✓';setTimeout(()=>b.textContent='کپی متن صفحه',1200)};
+document.addEventListener('keydown',e=>{
+  const a=document.activeElement,it=item();
+  if(!it||it.status!=='done'||a.tagName==='SELECT'||a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&['text','search','range','number','password'].includes(a.type))||e.ctrlKey||e.metaKey||e.altKey)return;
+  const k=e.key.toLowerCase();
+  if(k==='arrowleft')go(1);else if(k==='arrowright')go(-1);
+  else if(k==='r')rotate(e.shiftKey?-90:90);
+  else if(k==='f'){S.focus=!S.focus;applyView()}else if(k==='+'||k==='=')setFs(1);else if(k==='-')setFs(-1);
+});
+fetch('/health').then(r=>r.json()).then(h=>{
+  const p=$('#health');p.textContent=h.model_loaded?'مدل آماده':'مدل هنوز بارگذاری نشده';p.className='pill '+(h.model_loaded?'ok':'warn');
+  if(h.auth_required)$('#keyLabel').style.display='';
+}).catch(()=>{const p=$('#health');p.textContent='سرور در دسترس نیست';p.className='pill bad'});
+applyView();renderQueue();render();
+</script></body></html>

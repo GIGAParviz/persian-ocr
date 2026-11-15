@@ -1,0 +1,11 @@
+services:
+  persian-ocr:
+    image: ${PERSIAN_OCR_IMAGE:-persian-ocr:0.2.0}
+    container_name: persian-ocr
+    ports:
+      - "${PERSIAN_OCR_PORT:-8000}:8000"
+    environment:
+      PERSIAN_OCR_API_KEY: ${PERSIAN_OCR_API_KEY:-}
+      PERSIAN_OCR_MAX_UPLOAD_MB: ${PERSIAN_OCR_MAX_UPLOAD_MB:-100}
+    mem_limit: 3g
+    restart: unless-stopped

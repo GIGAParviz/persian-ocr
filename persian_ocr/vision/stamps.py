@@ -33,22 +33,24 @@ def unwrap_circular_stamps(ort: OrtOCR, gray: np.ndarray) -> list[Line]:
     H, W = gray.shape
     roi_y0 = int(H * 0.35)
     roi = gray[roi_y0:, :]
+    scale = min(1.0, (2_000_000 / roi.size) ** 0.5)
+    sample = cv2.resize(roi, (round(roi.shape[1] * scale), round(roi.shape[0] * scale)), interpolation=cv2.INTER_AREA) if scale < 1 else roi
     circles = cv2.HoughCircles(
-        cv2.GaussianBlur(roi, (5, 5), 0),
+        cv2.GaussianBlur(sample, (5, 5), 0),
         cv2.HOUGH_GRADIENT,
         dp=1.2,
-        minDist=250,
+        minDist=250 * scale,
         param1=100,
         param2=48,
-        minRadius=130,
-        maxRadius=230,
+        minRadius=max(1, round(130 * scale)),
+        maxRadius=max(1, round(230 * scale)),
     )
     if circles is None:
         return []
 
     stamp_lines: list[Line] = []
     for c in circles[0][:2]:
-        cx, cy, r = float(c[0]), float(c[1]), float(c[2])
+        cx, cy, r = (float(v) / scale for v in c)
         x_min, x_max = max(0, int(cx - r * 1.05)), min(W, int(cx + r * 1.05))
         y_min, y_max = max(0, int(cy - r * 1.05)), min(roi.shape[0], int(cy + r * 1.05))
         patch = roi[y_min:y_max, x_min:x_max]

@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from .config import CACHE_DIR, OUTPUT_DIR, PipelineConfig
+from .config import CACHE_DIR, OUTPUT_DIR, PipelineConfig, PreprocessMode
 
 COMMANDS = {"run", "debug", "serve"}
 
@@ -21,6 +21,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--no-html", action="store_true", help="بدون گزارش HTML")
     run.add_argument("--no-tables", action="store_true", help="بدون استخراج جدول و فاکتور (برای آزمون)")
     run.add_argument("--max-pages", type=int, default=0)
+    run.add_argument("--preprocess", choices=[mode.value for mode in PreprocessMode], default=PreprocessMode.original.value)
 
     dbg = sub.add_parser("debug", help="جدول و معادلات یک صفحه (برای عیب‌یابی فاکتور)")
     dbg.add_argument("file")
@@ -42,7 +43,7 @@ def _run(args: argparse.Namespace) -> int:
         print(f"خطا: فایل پیدا نشد: {source}")
         return 1
     print(f"پردازش: {source.name} ...")
-    config = PipelineConfig(use_lexicon=not args.no_lexicon, max_pages=args.max_pages, tables=not args.no_tables)
+    config = PipelineConfig(use_lexicon=not args.no_lexicon, max_pages=args.max_pages, tables=not args.no_tables, preprocess=PreprocessMode(args.preprocess))
     result = process_document(OcrEngine.load(), source, config)
     write_outputs(result, source, args.out, html=not args.no_html)
 

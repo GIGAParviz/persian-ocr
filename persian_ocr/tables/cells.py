@@ -19,20 +19,23 @@ def _line_masks(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def find_cells(gray: np.ndarray, min_w: int = 40, min_h: int = 28) -> list[BBox]:
-    horiz, vert = _line_masks(gray)
+    scale = min(1.0, (8_000_000 / gray.size) ** 0.5)
+    working = cv2.resize(gray, (round(gray.shape[1] * scale), round(gray.shape[0] * scale)), interpolation=cv2.INTER_AREA) if scale < 1 else gray
+    sx, sy = working.shape[1] / gray.shape[1], working.shape[0] / gray.shape[0]
+    horiz, vert = _line_masks(working)
     inv = cv2.bitwise_not(cv2.bitwise_or(horiz, vert))
-    H, W = gray.shape
+    H, W = working.shape
     n, _, stats, _ = cv2.connectedComponentsWithStats(inv, connectivity=4)
     cells = []
     for i in range(1, n):
         x, y, w, h, area = stats[i]
-        if w < min_w or h < min_h:
+        if w < min_w * sx or h < min_h * sy:
             continue
         if w > W * 0.97 and h > H * 0.5:
             continue
         if area < 0.6 * w * h:
             continue
-        cells.append((int(x), int(y), int(x + w), int(y + h)))
+        cells.append((round(x / sx), round(y / sy), round((x + w) / sx), round((y + h) / sy)))
     return cells
 
 

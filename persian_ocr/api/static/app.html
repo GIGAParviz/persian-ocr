@@ -84,6 +84,15 @@ details.more summary{cursor:pointer;font-weight:600}
 .box.fix{background:var(--goodbg)}.box.rev{background:var(--warnbg)}.box.low{background:var(--badbg)}.box.inv{background:var(--panel2);border:1px solid var(--bd2)}
 .box ul{margin:4px 0;padding-inline-start:20px}
 code{direction:ltr;unicode-bidi:embed;background:rgba(127,127,127,.15);padding:0 4px;border-radius:3px}
+.layout-wrap{position:relative;margin:4px auto 20px;direction:ltr}
+.layout-sheet{position:relative;direction:ltr;background:#fff;box-shadow:0 0 0 1px var(--bd2);transform-origin:top left}
+.layout-cell{position:absolute;box-sizing:border-box;border:1px solid #d5d9df;pointer-events:none}
+.layout-item{position:absolute;box-sizing:border-box;overflow:hidden;white-space:nowrap;text-align:right;direction:rtl;line-height:1.12;font-family:var(--fa);color:#18212b;padding:0 2px}
+.layout-item span{display:inline-block}
+.layout-item.low{color:#8a5b00}
+.layout-item:hover{outline:2px solid var(--acc);overflow:visible;background:#fff;z-index:2}
+#layoutZoomWrap{display:none;align-items:center;gap:5px}
+#layoutZoom{width:90px}
 body.noimg #imgcol{display:none}
 body.focus header,body.focus .strip,body.focus #queue{display:none}
 @media(max-width:1000px){.grid{flex-direction:column;overflow:auto}.col{min-height:60vh}}
@@ -96,6 +105,8 @@ body.focus header,body.focus .strip,body.focus #queue{display:none}
   <label title="دیکشنری موجودیت‌های سازمان را اعمال می‌کند. برای سنجش دقت واقعی خاموش بماند."><input type="checkbox" id="lex">دیکشنری سازمان</label>
   <label title="استخراج جدول و فاکتور؛ برای آزمون بدون جدول خاموش کن."><input type="checkbox" id="tbl" checked>جدول و فاکتور</label>
   <label title="۰ یعنی همه‌ی صفحه‌ها">حداکثر صفحه <input class="inp num" type="number" id="maxp" min="0" max="500" value="0"></label>
+  <label title="پردازش تصویر قبل از خواندن مدل؛ اتصال شکستگی‌ها آزمایشی است و ممکن است رقم‌ها را تغییر دهد.">پردازش تصویر <select class="sel" id="prep"><option value="original">تصویر اصلی</option><option value="sharpen">شارپ‌سازی ملایم</option><option value="sharpen_light">شارپ + نور ملایم</option><option value="connect">شارپ + اتصال شکستگی</option><option value="soft_light">شارپ + اتصال + نور ملایم</option></select></label>
+  <span class="pill warn" id="prepRisk" style="display:none">آزمایشی؛ مبلغ‌ها را با حالت اصلی مقایسه کن</span>
   <label id="keyLabel" style="display:none">کلید API <input class="inp" type="password" id="key" style="width:140px;direction:ltr"></label>
  </div>
  <span class="sp"></span>
@@ -134,15 +145,18 @@ body.focus header,body.focus .strip,body.focus #queue{display:none}
     <label title="رنگ‌آمیزی اصلاح‌ها و موارد مشکوک"><input type="checkbox" id="hl" checked>هایلایت</label>
     <label><input type="checkbox" id="showImg" checked>تصویر اصلی</label>
     <span>متن <button class="btn icon" id="fsM" aria-label="کوچک‌تر">A−</button><b id="fsV">16</b><button class="btn icon" id="fsP" aria-label="بزرگ‌تر">A+</button></span>
+    <button class="btn" id="layoutToggle">نمای متن پیوسته</button>
+    <label id="layoutZoomWrap">بزرگ‌نمایی چیدمان <input type="range" id="layoutZoom" min="40" max="250" value="100"></label>
     <button class="btn" id="copyBtn">کپی متن صفحه</button>
     <button class="btn" id="dlTxt">دانلود txt</button>
     <button class="btn" id="dlJson">دانلود json</button>
+    <button class="btn" id="dlLayout">دانلود چیدمان HTML</button>
     <button class="btn" id="focusBtn" title="مخفی کردن همه جز تصویر و متن (F)">حالت تمرکز</button>
    </div>
   </div>
   <div class="strip" id="strip"></div>
   <div class="grid">
-   <div class="col" id="imgcol"><h3>تصویر اصلی <input type="range" id="zoom" min="40" max="250" value="100" aria-label="اندازه‌ی تصویر" style="margin-inline-start:auto;width:90px"></h3><div class="scroll imgwrap" id="img"></div></div>
+   <div class="col" id="imgcol"><h3><span id="imageTitle">تصویر اصلی</span><button class="btn" id="sourceView" style="display:none">نمایش تصویر اصلی</button><input type="range" id="zoom" min="40" max="250" value="100" aria-label="اندازه‌ی تصویر" style="margin-inline-start:auto;width:90px"></h3><div class="scroll imgwrap" id="img"></div></div>
    <div class="col"><h3 id="paneAH"></h3><div class="scroll content" id="paneA"></div></div>
   </div>
  </section>
@@ -151,9 +165,10 @@ body.focus header,body.focus .strip,body.focus #queue{display:none}
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const SUFFIX=/\.(pdf|png|jpe?g|tiff?|bmp|webp)$/i;
-const S={hl:true,img:true,zoom:100,fs:16,focus:false,page:0};
+const PREP_LABELS={original:'تصویر اصلی',sharpen:'شارپ‌سازی ملایم',sharpen_light:'شارپ + نور ملایم',connect:'شارپ + اتصال شکستگی',soft_light:'شارپ + اتصال + نور ملایم'};
+const S={hl:true,img:true,processed:true,zoom:100,layoutZoom:100,layout:true,fs:16,focus:false,page:0};
 const Q=[];let cur=-1,uid=0,busy=false,timer=null;
-try{const v=JSON.parse(localStorage.getItem('ocrapp-view')||'{}');if(v.fs)S.fs=v.fs;if(v.img===false)S.img=false;if(v.lex)$('#lex').checked=true;if(v.key)$('#key').value=v.key}catch(e){}
+try{const v=JSON.parse(localStorage.getItem('ocrapp-view')||'{}');if(v.fs)S.fs=v.fs;if(v.img===false)S.img=false;if(v.lex)$('#lex').checked=true;if(v.key)$('#key').value=v.key;if(v.prep)$('#prep').value=v.prep;if(v.layout===false)S.layout=false}catch(e){}
 function applyView(){
   document.body.style.setProperty('--fs',S.fs+'px');
   document.body.classList.toggle('noimg',!S.img);document.body.classList.toggle('nohl',!S.hl);document.body.classList.toggle('focus',S.focus);
@@ -161,7 +176,8 @@ function applyView(){
   $('#focusBtn').textContent=S.focus?'خروج از تمرکز':'حالت تمرکز';
   saveView();
 }
-function saveView(){try{localStorage.setItem('ocrapp-view',JSON.stringify({fs:S.fs,img:S.img,lex:$('#lex').checked,key:$('#key').value}))}catch(e){}}
+function saveView(){try{localStorage.setItem('ocrapp-view',JSON.stringify({fs:S.fs,img:S.img,lex:$('#lex').checked,key:$('#key').value,prep:$('#prep').value,layout:S.layout}))}catch(e){}}
+function prepNotice(){$('#prepRisk').style.display=$('#prep').value==='original'?'none':''}
 const setFs=d=>{S.fs=Math.min(30,Math.max(12,S.fs+d));applyView()};
 const item=()=>Q[cur];
 const rot=()=>{const it=item();return (it&&it.rot&&it.rot[S.page])||0};
@@ -181,7 +197,7 @@ async function pump(){
   try{
     const fd=new FormData();fd.append('file',it.file);
     const key=$('#key').value.trim();
-    const q=`lexicon=${$('#lex').checked}&tables=${$('#tbl').checked}&max_pages=${Math.max(0,+$('#maxp').value||0)}`;
+    const q=`lexicon=${$('#lex').checked}&tables=${$('#tbl').checked}&max_pages=${Math.max(0,+$('#maxp').value||0)}&preprocess=${encodeURIComponent(it.preprocess)}`;
     const r=await fetch('/app/run?'+q,{method:'POST',body:fd,headers:key?{'X-API-Key':key}:{}});
     const j=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(detailOf(j,r.status));
@@ -198,7 +214,7 @@ function addFiles(list){
   let bad=[];
   for(const f of list){
     if(!SUFFIX.test(f.name)){bad.push(f.name);continue}
-    Q.push({id:++uid,file:f,name:f.name,status:'wait'});
+    Q.push({id:++uid,file:f,name:f.name,preprocess:$('#prep').value,status:'wait'});
   }
   if(bad.length)alert('نوع فایل پشتیبانی نمی‌شود:\n'+bad.join('\n'));
   if(cur<0&&Q.length)cur=0;
@@ -238,7 +254,8 @@ function layoutImage(){
   const box=$('#img'),wrap=$('#rotbox'),im=wrap&&wrap.querySelector('img');
   if(!im)return;
   const p=item().doc.pages[S.page],r=rot(),swap=r%180!==0;
-  const nw=p.size[0],nh=p.size[1],vw=swap?nh:nw,vh=swap?nw:nh;
+  const size=S.processed&&p.processed_image?p.processed_size:p.size;
+  const nw=size[0],nh=size[1],vw=swap?nh:nw,vh=swap?nw:nh;
   const avail=Math.max(120,(box.clientWidth||700)-26);
   const scale=avail*S.zoom/100/vw;
   wrap.style.width=Math.round(vw*scale)+'px';wrap.style.height=Math.round(vh*scale)+'px';
@@ -252,19 +269,85 @@ function rotate(delta){
   layoutImage();
 }
 function chip(label,v,bad){return `<span class="chip ${bad&&v?'bad':''}">${label}<b>${v==null?'–':v}</b></span>`}
+function layoutBoxStyle(b){
+  return 'left:'+b[0]+'px;top:'+b[1]+'px;width:'+Math.max(1,b[2]-b[0])+'px;height:'+Math.max(1,b[3]-b[1])+'px';
+}
+function layoutSheetMarkup(layout){
+  const cells=layout.cells.map(b=>'<div class="layout-cell" style="'+layoutBoxStyle(b)+'"></div>').join('');
+  const lineHeights=layout.items.filter(it=>it.source==='line').map(it=>it.box[3]-it.box[1]).sort((a,b)=>a-b);
+  const typical=lineHeights.length?lineHeights[Math.floor(lineHeights.length/2)]:0;
+  const cellCap=typical?Math.max(12,Math.min(100,Math.round(typical*.82))):42;
+  const items=layout.items.map(it=>{
+    const b=it.box,fs=Math.max(10,Math.min(it.source==='cell'?cellCap:100,Math.round((b[3]-b[1])*.78)));
+    return '<div class="layout-item'+(it.conf<.75?' low':'')+'" dir="rtl" title="'+esc(it.source+' · '+it.conf.toFixed(2)+' · '+it.text)+'" style="'+layoutBoxStyle(b)+';font-size:'+fs+'px"><span>'+esc(it.text)+'</span></div>';
+  }).join('');
+  return '<div class="layout-sheet" id="layoutSheet" style="width:'+layout.size[0]+'px;height:'+layout.size[1]+'px">'+cells+items+'</div>';
+}
+function layoutMarkup(layout){
+  return '<div class="layout-wrap" id="layoutWrap">'+layoutSheetMarkup(layout)+'</div>';
+}
+function resizeLayout(){
+  const wrap=$('#layoutWrap'),sheet=$('#layoutSheet'),it=item();
+  if(!wrap||!sheet||!it||!it.doc)return;
+  const [w,h]=it.doc.pages[S.page].layout.size;
+  const available=Math.max(160,($('#paneA').clientWidth||700)-28);
+  const scale=available/w*S.layoutZoom/100;
+  wrap.style.width=Math.round(w*scale)+'px';
+  wrap.style.height=Math.round(h*scale)+'px';
+  sheet.style.transform='scale('+scale+')';
+}
+function fitLayout(){
+  const sheet=$('#layoutSheet');
+  if(!sheet)return;
+  sheet.querySelectorAll('.layout-item').forEach(el=>{
+    const span=el.querySelector('span');
+    let size=parseFloat(el.style.fontSize);
+    while(span.scrollWidth>el.clientWidth-4&&size>8){
+      size=Math.max(8,size-1);
+      el.style.fontSize=size+'px';
+    }
+  });
+  resizeLayout();
+}
+function downloadLayout(){
+  const it=item();
+  if(!it||!it.doc)return;
+  const page=it.doc.pages[S.page];
+  if(!page.layout)return;
+  const style='body{margin:0;padding:20px;background:#f2f3f5;overflow:auto;direction:ltr}.layout-sheet{position:relative;direction:ltr;background:white;box-shadow:0 0 0 1px #cbd2da;font-family:Tahoma,sans-serif}.layout-cell{position:absolute;box-sizing:border-box;border:1px solid #d5d9df}.layout-item{position:absolute;box-sizing:border-box;overflow:hidden;white-space:nowrap;text-align:right;direction:rtl;line-height:1.12;color:#18212b;padding:0 2px}.layout-item span{display:inline-block}.layout-item.low{color:#8a5b00}';
+  const fitting='document.querySelectorAll(".layout-item").forEach(el=>{const span=el.querySelector("span");let size=parseFloat(el.style.fontSize);while(span.scrollWidth>el.clientWidth-4&&size>8){size=Math.max(8,size-1);el.style.fontSize=size+"px"}})';
+  const content='<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><title>'+esc(it.doc.name)+' - صفحه '+page.page+'</title><style>'+style+'</style>'+layoutSheetMarkup(page.layout)+'<script>'+fitting+'</scr'+'ipt></html>';
+  const link=document.createElement('a');
+  link.href=URL.createObjectURL(new Blob([content],{type:'text/html;charset=utf-8'}));
+  link.download=it.doc.name+'_layout_p'+page.page+'.html';
+  document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(link.href),2000);
+}
+
 function renderViewer(){
   const it=item(),d=it.doc;
   if(S.page>=d.pages.length)S.page=0;
   const p=d.pages[S.page],st=p.stats;
-  $('#pageSel').innerHTML=d.pages.map((x,i)=>`<option value="${i}" ${i===S.page?'selected':''}>صفحه ${x.page} از ${d.pages.length}</option>`).join('');
-  $('#img').innerHTML=`<div class="rotbox" id="rotbox"><img src="data:image/jpeg;base64,${p.image}" alt="صفحه ${p.page} از ${esc(d.name)}"></div>`;
+  $('#pageSel').innerHTML=d.pages.map((x,i)=>'<option value="'+i+'" '+(i===S.page?'selected':'')+'>صفحه '+x.page+' از '+d.pages.length+'</option>').join('');
+  const processed=!!p.processed_image,showing=S.processed&&processed;
+  $('#imageTitle').textContent=showing?'تصویر مبنای OCR':'تصویر اصلی';
+  $('#sourceView').style.display=processed?'':'none';
+  $('#sourceView').textContent=showing?'نمایش تصویر اصلی':'نمایش تصویر مبنای OCR';
+  $('#img').innerHTML='<div class="rotbox" id="rotbox"><img src="data:image/jpeg;base64,'+(showing?p.processed_image:p.image)+'" alt="صفحه '+p.page+' از '+esc(d.name)+'"></div>';
   layoutImage();
-  $('#paneAH').innerHTML=`خروجی مدل <small>${esc(d.file)} — صفحه ${p.page} — ${it.sec.toFixed(1)} ثانیه</small>`;
-  const more=(p.notes?`<details class="more" open><summary>اصلاح‌ها، موارد مشکوک و خطوط کم‌اطمینان</summary>${p.notes}</details>`:'')+(p.invoice?`<details class="more"><summary>فاکتور ساختاریافته</summary>${p.invoice}</details>`:'');
-  $('#paneA').innerHTML=(p.html||'<div class="empty">این صفحه متنی نداشت.</div>')+more;
-  $('#strip').innerHTML=chip('واژه',st.words)+chip('جدول',st.tables)+chip('اصلاح خودکار',st.corr)+chip('مرور انسانی',st.rev,1)+chip('کم‌اطمینان',st.low,1)+(d.mismatch?chip('فاکتور ✗',d.mismatch,1):'');
+  const layoutActive=!!(S.layout&&p.layout&&p.layout.size&&p.layout.size[0]>0);
+  $('#layoutToggle').disabled=!p.layout;
+  $('#layoutToggle').textContent=layoutActive?'نمای متن پیوسته':'نمای چیدمان صفحه';
+  $('#layoutZoomWrap').style.display=layoutActive?'inline-flex':'none';
+  $('#dlLayout').disabled=!p.layout;
+  $('#paneAH').innerHTML=(layoutActive?'چیدمان متن در صفحه':'متن پیوسته')+' <small>'+esc(d.file)+' — صفحه '+p.page+' — '+it.sec.toFixed(1)+' ثانیه</small>';
+  const more=(p.notes?'<details class="more" open><summary>اصلاح‌ها، موارد مشکوک و خطوط کم‌اطمینان</summary>'+p.notes+'</details>':'')+(p.invoice?'<details class="more"><summary>فاکتور ساختاریافته</summary>'+p.invoice+'</details>':'');
+  $('#paneA').innerHTML=(layoutActive?layoutMarkup(p.layout):(p.html||'<div class="empty">این صفحه متنی نداشت.</div>'))+more;
+  if(layoutActive)fitLayout();
+  $('#strip').innerHTML=chip('پردازش تصویر',PREP_LABELS[it.preprocess]||it.preprocess)+chip('واژه',st.words)+chip('جدول',st.tables)+chip('اصلاح خودکار',st.corr)+chip('مرور انسانی',st.rev,1)+chip('کم‌اطمینان',st.low,1)+(d.mismatch?chip('فاکتور ✗',d.mismatch,1):'');
   $('#paneA').scrollTop=0;$('#img').scrollTop=0;
 }
+
 const go=n=>{const c=item().doc.pages.length;S.page=Math.min(c-1,Math.max(0,S.page+n));renderViewer()};
 function download(ext){
   const it=item();if(!it||!it.doc)return;
@@ -283,18 +366,21 @@ document.addEventListener('dragleave',e=>{e.preventDefault();if(--dragDepth<=0){
 document.addEventListener('dragover',e=>e.preventDefault());
 document.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;document.body.classList.remove('dragging');if(e.dataTransfer&&e.dataTransfer.files.length)addFiles([...e.dataTransfer.files])});
 document.addEventListener('paste',e=>{const fs=[...(e.clipboardData&&e.clipboardData.files||[])].map((f,i)=>f.name&&SUFFIX.test(f.name)?f:new File([f],'clipboard-'+Date.now()+'-'+i+'.png',{type:f.type}));if(fs.length)addFiles(fs)});
-$('#lex').onchange=saveView;$('#key').onchange=saveView;
+$('#lex').onchange=saveView;$('#key').onchange=saveView;$('#prep').onchange=()=>{saveView();prepNotice()};
 $('#pageSel').onchange=e=>{S.page=+e.target.value;renderViewer()};
 $('#prevPg').onclick=()=>go(-1);$('#nextPg').onclick=()=>go(1);
 $('#rotL').onclick=()=>rotate(-90);$('#rotR').onclick=()=>rotate(90);$('#rot180').onclick=()=>rotate(180);$('#rot0').onclick=()=>rotate(-rot());
 $('#hl').onchange=e=>{S.hl=e.target.checked;applyView()};
 $('#showImg').onchange=e=>{S.img=e.target.checked;applyView()};
+$('#sourceView').onclick=()=>{S.processed=!S.processed;renderViewer()};
 $('#fsM').onclick=()=>setFs(-1);$('#fsP').onclick=()=>setFs(1);
 $('#focusBtn').onclick=()=>{S.focus=!S.focus;applyView()};
 $('#zoom').oninput=e=>{S.zoom=+e.target.value;layoutImage()};
-$('#dlTxt').onclick=()=>download('txt');$('#dlJson').onclick=()=>download('json');
-window.addEventListener('resize',()=>{if(item()&&item().status==='done')layoutImage()});
-$('#copyBtn').onclick=()=>{const t=$('#paneA').innerText;if(navigator.clipboard)navigator.clipboard.writeText(t);const b=$('#copyBtn');b.textContent='کپی شد ✓';setTimeout(()=>b.textContent='کپی متن صفحه',1200)};
+$('#dlTxt').onclick=()=>download('txt');$('#dlJson').onclick=()=>download('json');$('#dlLayout').onclick=downloadLayout;
+$('#layoutToggle').onclick=()=>{S.layout=!S.layout;saveView();renderViewer()};
+$('#layoutZoom').oninput=e=>{S.layoutZoom=+e.target.value;resizeLayout()};
+window.addEventListener('resize',()=>{if(item()&&item().status==='done'){layoutImage();resizeLayout()}});
+$('#copyBtn').onclick=()=>{const it=item(),t=it&&it.doc?it.doc.pages[S.page].plain_text:$('#paneA').innerText;if(navigator.clipboard)navigator.clipboard.writeText(t);const b=$('#copyBtn');b.textContent='کپی شد ✓';setTimeout(()=>b.textContent='کپی متن صفحه',1200)};
 document.addEventListener('keydown',e=>{
   const a=document.activeElement,it=item();
   if(!it||it.status!=='done'||a.tagName==='SELECT'||a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&['text','search','range','number','password'].includes(a.type))||e.ctrlKey||e.metaKey||e.altKey)return;
@@ -307,5 +393,5 @@ fetch('/health').then(r=>r.json()).then(h=>{
   const p=$('#health');p.textContent=h.model_loaded?'مدل آماده':'مدل هنوز بارگذاری نشده';p.className='pill '+(h.model_loaded?'ok':'warn');
   if(h.auth_required)$('#keyLabel').style.display='';
 }).catch(()=>{const p=$('#health');p.textContent='سرور در دسترس نیست';p.className='pill bad'});
-applyView();renderQueue();render();
+applyView();prepNotice();renderQueue();render();
 </script></body></html>

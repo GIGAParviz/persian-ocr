@@ -2,14 +2,16 @@ import json
 import os
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from persian_ocr.api.app import create_app
 from persian_ocr.api.deps import API_KEY_ENV
-from persian_ocr.config import TMP_DIR
+from persian_ocr.config import TMP_DIR, PreprocessMode
 
 SAMPLE = Path(__file__).resolve().parent.parent / "samples" / "invoice-sample.png"
 RUN = "persian_ocr.api.routes.webapp.run_ocr"
@@ -47,6 +49,8 @@ class Page(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn("text/html", res.headers["content-type"])
         self.assertIn("/app/run", res.text)
+        self.assertIn('id="prep"', res.text)
+        self.assertIn('id="sourceView"', res.text)
         self.assertNotIn("http://", res.text)
         self.assertNotIn("https://", res.text)
 
@@ -82,6 +86,24 @@ class Run(unittest.TestCase):
             self.post()
             self.post(query="?lexicon=true&max_pages=2&tables=false")
         self.assertEqual([c.args[1:] for c in run.call_args_list], [(False, 0, True), (True, 2, False)])
+
+    def test_processed_image_and_mode_reach_web_ui(self):
+        def fake_with_preview(*_args, **kwargs):
+            self.assertEqual(kwargs["preprocess"], PreprocessMode.soft_light)
+            self.assertIsNotNone(kwargs["on_page"])
+            page = SimpleNamespace(lines=[SimpleNamespace(box=[2, 3, 35, 12], text="متن", conf=0.9)], tables=[])
+            kwargs["on_page"](0, np.full((24, 40), 180, np.uint8), page)
+            return fake_result()
+
+        with patch(RUN, side_effect=fake_with_preview):
+            page = self.post(query="?preprocess=soft_light").json()["doc"]["pages"][0]
+        self.assertEqual(page["processed_size"], [40, 24])
+        self.assertTrue(page["processed_image"])
+        self.assertEqual(page["layout"]["size"], [40, 24])
+        self.assertEqual(page["layout"]["items"][0]["text"], "متن")
+
+    def test_invalid_preprocessing_mode_is_rejected(self):
+        self.assertEqual(self.post(query="?preprocess=unknown").status_code, 422)
 
     def test_ground_truth_is_not_part_of_the_response(self):
         with patch(RUN, side_effect=fake_result):

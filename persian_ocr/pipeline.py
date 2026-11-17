@@ -8,10 +8,13 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Callable
 
+import cv2
 import numpy as np
 from indra_ocr.pipeline import Line
+from indra_ocr.rec_preproc import is_dark_line
+from indra_ocr.rtl import flip
 
-from .config import PipelineConfig
+from .config import PipelineConfig, PreprocessMode
 from .engine import OcrEngine
 from .invoice import parse_invoice, reconcile_document
 from .orientation import robust_upright
@@ -20,12 +23,52 @@ from .tables import Cell, Table, extract_tables, row_to_markdown, table_to_markd
 from .text import normalize, normalize_digits, postprocess_text
 from .tiling import merge_lines, merge_tiles, tile_bounds
 from .vision import recover_footer_segments, unwrap_circular_stamps, watermark_suppress
+from .vision.payable import recover_faint_payable
+from .vision.preprocess import apply_preprocessing
 
 
 @dataclass
 class PageOcr:
     lines: list[Line]
     tables: list[Table] = field(default_factory=list)
+    review_queue: list[dict] = field(default_factory=list)
+
+
+AMOUNT_RE = re.compile(r"\d{1,3}(?:[,٬،]\d{3}){2,}")
+
+
+def _repair_dark_amount(engine: OcrEngine, gray: np.ndarray, line: Line) -> Line:
+    amount = AMOUNT_RE.search(normalize_digits(line.text))
+    if amount is None or amount.group().count("5") < 2 or not is_dark_line(gray, line.box):
+        return line
+    result = engine.ort.recognize(gray, np.array([[*line.box, 1.0]], dtype=np.float32))[0]
+    chars = [(normalize_digits(ch), float(x)) for ch, x in result[2] if isinstance(ch, str) and len(ch) == 1 and (ch.isdigit() or ch in ",٬،")]
+    token_text = "".join(ch for ch, _ in chars)
+    token_amount = AMOUNT_RE.search(token_text)
+    if token_amount is None or token_amount.group() != amount.group():
+        return line
+    x0, y0, x1, y1 = (int(v) for v in line.box)
+    height = y1 - y0
+    mask = (gray[y0:y1, x0:x1] > 165).astype(np.uint8)
+    if not mask.size:
+        return line
+    _, _, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    components = [(x0 + x, x0 + x + w, h) for x, _, w, h, area in stats[1:] if 8 <= w < height * 0.9 and 8 <= h < height * 0.95 and area > height * height * 0.003]
+
+    def glyph_height(x: float) -> int:
+        return max((h for left, right, h in components if left <= x <= right), default=0)
+
+    segment = chars[token_amount.start():token_amount.end()]
+    tall = max((glyph_height(x) for ch, x in segment if ch.isdigit() and ch != "5"), default=0)
+    if tall < height * 0.5:
+        return line
+    corrected = ["0" if ch == "5" and 0 < glyph_height(x) < tall * 0.72 else ch for ch, x in segment]
+    if sum(a != b for (a, _), b in zip(segment, corrected)) < 2:
+        return line
+    text = line.text[:amount.start()] + "".join(corrected) + line.text[amount.end():]
+    text = re.sub(r"ميلغ", "مبلغ", text)
+    text = re.sub(r"ر\s*[يی]ال", " ریال", text)
+    return Line(box=list(line.box), text=text, conf=min(float(line.conf), 0.74))
 
 
 def _recognize_lines(engine: OcrEngine, gray: np.ndarray, config: PipelineConfig) -> list[Line]:
@@ -51,12 +94,28 @@ PageHook = Callable[[int, np.ndarray, PageOcr], None]
 
 
 def ocr_page(engine: OcrEngine, gray: np.ndarray, config: PipelineConfig, on_page: PageHook | None = None, idx: int = 0) -> PageOcr:
+    gray = apply_preprocessing(gray, config.preprocess)
     with engine.force_rtl() if config.engineered else nullcontext():
         if config.engineered:
             gray, _, _, _ = robust_upright(engine.ort, gray)
         lines = _recognize_lines(engine, gray, config)
+        recovery_review = []
+        if config.engineered:
+            lines = [_repair_dark_amount(engine, gray, line) for line in lines]
+            lines = _recover_payable(engine, gray, lines)
+            lines, recovery_review = recover_faint_payable(engine, gray, lines)
         tables = extract_tables(engine.ort, gray) if config.engineered and config.tables else []
-    page = PageOcr(lines=lines, tables=tables)
+    review_queue = list(recovery_review)
+    for line in lines:
+        if not line.text.startswith("قابل پرداخت:") or float(line.conf) < 0.85:
+            continue
+        cell = _cell_of(line, tables)
+        if cell is None or not normalize(cell.text).startswith("قابل پرداخت:") or float(cell.conf) >= float(line.conf):
+            continue
+        review_queue.extend(_reading_conflicts(line, cell))
+        cell.text = line.text
+        cell.conf = float(line.conf)
+    page = PageOcr(lines=lines, tables=tables, review_queue=review_queue)
     if on_page is not None:
         on_page(idx, gray, page)
     return page
@@ -80,6 +139,49 @@ NUMBER = re.compile(r"\d[\d,٬،./]*")
 
 def _line_y(line: Line) -> float:
     return (line.box[1] + line.box[3]) / 2
+
+
+def _recover_payable(engine: OcrEngine, gray: np.ndarray, lines: list[Line]) -> list[Line]:
+    height, width = gray.shape
+    for label in lines:
+        if "پردا" not in label.text or label.box[1] < height * 0.5:
+            continue
+        label_height = label.box[3] - label.box[1]
+        row = [line for line in lines if abs(_line_y(line) - _line_y(label)) < label_height * 0.7]
+        numbers = [line for line in row if line.box[2] < label.box[0] and 2 <= sum(ch.isdigit() for ch in line.text) <= 4]
+        if not numbers:
+            continue
+        number = max(numbers, key=lambda line: line.box[0])
+        number_width = number.box[2] - number.box[0]
+        number_height = number.box[3] - number.box[1]
+        label_box = [max(0, label.box[0] - width * 0.12), max(0, label.box[1] - label_height * 0.15), min(width, label.box[2] + width * 0.05), min(height, label.box[3] + label_height * 0.15), 1.0]
+        number_box = [max(0, number.box[0] - number_width * 0.1), number.box[1] + number_height * 0.28, min(width, label.box[0] - width * 0.2, number.box[0] + width * 0.25), min(height, number.box[3] + number_height * 0.2), 1.0]
+        number_box = [round(number_box[0]), round(number_box[1]), int(np.ceil(number_box[2])), int(np.ceil(number_box[3])), 1.0]
+        if number_box[2] <= number_box[0] or number_box[3] <= number_box[1]:
+            continue
+        unit = max((line for line in row if line.box[2] < number.box[0] and not any(ch.isdigit() for ch in line.text)), key=lambda line: line.box[2], default=None)
+        boxes = [label_box, number_box]
+        if unit is not None:
+            unit_width = unit.box[2] - unit.box[0]
+            unit_height = unit.box[3] - unit.box[1]
+            boxes.append([max(0, unit.box[0] - unit_width * 1.2), unit.box[1] + unit_height * 0.14, min(width, unit.box[2] + unit_width * 1.3), unit.box[3] - unit_height * 0.02, 1.0])
+        readings = [engine.ort.recognize(gray, np.array([box], dtype=np.float32))[0] for box in boxes]
+        label_text = normalize(flip(readings[0][0])).strip()
+        number_text = normalize_digits(flip(readings[1][0])).strip()
+        if label_text.rstrip(":") != "قابل پرداخت" or readings[0][1] < 0.85 or readings[1][1] < 0.85 or not re.fullmatch(r"[\d,٬،\s]+", number_text):
+            continue
+        digits = re.sub(r"\D", "", number_text)
+        if not 5 <= len(digits) <= 12:
+            continue
+        currency = " ریال" if unit is not None and readings[2][1] >= 0.7 and normalize(flip(readings[2][0])) == "ریال" else ""
+        text = f"قابل پرداخت: {int(digits):,}{currency}"
+        removed = {id(line) for line in row}
+        recovered = [line for line in lines if id(line) not in removed]
+        confidence = min(float(reading[1]) for reading in readings[:3 if currency else 2])
+        recovered.append(Line(box=[min(line.box[0] for line in row), min(line.box[1] for line in row), max(line.box[2] for line in row), max(line.box[3] for line in row)], text=text, conf=confidence))
+        recovered.sort(key=lambda line: (round(line.box[1] / 30) * 30, -line.box[0]))
+        return recovered
+    return lines
 
 
 def _cell_of(line: Line, tables: list[Table], margin: float = 8.0) -> Cell | None:
@@ -192,7 +294,7 @@ def _build_page(idx: int, page: PageOcr, config: PipelineConfig) -> dict:
         "text": post["text"],
         "text_dedup": text_dedup,
         "corrections": post["corrections"],
-        "review_queue": post["review_queue"] + conflicts,
+        "review_queue": post["review_queue"] + page.review_queue + conflicts,
         "low_confidence_lines": [
             {"text": l.text, "conf": round(float(l.conf), 3), "box": [round(float(v), 1) for v in l.box]}
             for l in lines
@@ -208,4 +310,4 @@ def process_document(engine: OcrEngine, path: str | Path, config: PipelineConfig
     pages_ocr, elapsed = ocr_document(engine, path, config, on_page)
     pages = [_build_page(i, p, config) for i, p in enumerate(pages_ocr)]
     reconcile_document([p["invoice"] for p in pages if p["invoice"]])
-    return {"file": Path(path).name, "time_sec": round(elapsed, 2), "pages": pages}
+    return {"file": Path(path).name, "time_sec": round(elapsed, 2), "preprocess": PreprocessMode(config.preprocess).value, "pages": pages}

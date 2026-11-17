@@ -1,514 +1,178 @@
-# Persian OCR — OCR فارسی برای اسناد ساخت‌دار سازمانی
+# Persian OCR
 
-استخراج متن، جدول و فیلدهای مهم (کد ملی، شناسه ملی، شبا، کدپستی، مبلغ، تاریخ) از اسکن‌ها و PDFهای فارسی،
-**فقط روی CPU و بدون فاین‌تیون**. مدل پایه [Indra OCR](https://huggingface.co/datalab-to/indra-ocr) است؛
-دقت با مهندسی تصویر، بازسازی جدول و قواعد تعیینی (checksum شناسه‌ها، معادلات فاکتور) بالا می‌رود.
+Persian OCR extracts text, ruled tables, and selected fields from scanned images and PDFs. It runs on CPU with [Indra OCR](https://huggingface.co/datalab-to/indra-ocr) and adds page orientation, overlapping tiles, table reconstruction, text normalization, and invoice checks. The service includes a browser UI, a CLI, and an HTTP API.
 
-> **اصل طراحی: حدس نزن.** اگر اصلاحِ یکتا و قطعی وجود نداشته باشد، مورد اصلاح نمی‌شود و به صف مرور انسانی
-> می‌رود (گزارش HTML با تصویر صفحه کنار متن).
+Financial readings need human verification. A plausible total or a consistent invoice equation does not prove that every digit was recognized correctly. Ambiguous cases are reported for review where the pipeline detects them; some errors can still pass silently.
 
----
+## Features
 
-## فهرست
+| Area | Behavior |
+| --- | --- |
+| Input | PDF pages and PNG, JPEG, BMP, TIFF, or WebP images |
+| OCR | Orientation and skew correction, right-to-left recognition, overlapping page tiles |
+| Image handling | Header watermark suppression, faint footer recovery, circular stamp reading, and optional preprocessing modes |
+| Tables | Ruled-table detection and OCR of individual cells, including dark headers |
+| Invoices | Column mapping, item equations, tax and discount checks, and document totals |
+| Text | Persian character and digit normalization, identifier validation, Jalali date checks, and an optional organization lexicon |
+| Output | Plain text, JSON, and HTML review pages; the Web UI also exports a positioned page-layout HTML file |
+| Service | FastAPI, locally bundled Swagger UI, optional API key, and an upload-byte limit |
 
-- [قابلیت‌ها](#قابلیتها)
-- [نتیجه‌ها](#نتیجهها)
-- [پیش‌نیازها](#پیشنیازها)
-- [نصب](#نصب)
-- [شروع سریع](#شروع-سریع)
-- [خط فرمان](#خط-فرمان)
-- [استفاده از کد پایتون](#استفاده-از-کد-پایتون)
-- [سرویس HTTP و Swagger](#سرویس-http-و-swagger)
-- [اجرا با Docker](#اجرا-با-docker)
-- [خروجی‌ها](#خروجیها)
-- [متغیرهای محیطی](#متغیرهای-محیطی)
-- [پایپ‌لاین](#پایپلاین)
-- [ساختار پروژه](#ساختار-پروژه)
-- [ارزیابی](#ارزیابی)
-- [تست‌ها](#تستها)
-- [تغییرات بازبینی ۲۰۲۶-۱۱-۰۹](#تغییرات-بازبینی-۲۰۲۶-۱۱-۰۹)
-- [مشکلات شناخته‌شده](#مشکلات-شناختهشده)
-- [محدودیت‌ها](#محدودیتها)
-- [گام‌های بعدی](#گامهای-بعدی)
-- [مجوز](#مجوز)
+The default preprocessing mode is `original`. Sharpening, small stroke-gap connection, and mild lighting correction are available for comparison, but some of these modes changed verified amounts in local scans. See [preprocessing results](docs/preprocessing-web-ui.md).
 
----
+## Requirements and installation
 
-## قابلیت‌ها
+- Python 3.12 and a CPU. A GPU is not required.
+- The pinned dependencies in `requirements.lock`.
+- The Indra model weights, stored in `indra-ocr/` by default. The weights are downloaded separately and are not tracked by Git.
 
-| قابلیت | توضیح |
-|---|---|
-| ورودی | PDF (چندصفحه‌ای) یا تصویر تک‌صفحه‌ای: png، jpg، bmp، tif، webp |
-| جهت‌یابی | هر ۴ چرخش امتحان می‌شود و بهترین بر اساس خود OCR انتخاب می‌شود؛ رفع کجی |
-| Force-RTL | همه‌ی خطوط به recognizer راست‌به‌چپ می‌روند (جلوی خراب شدن تاریخ و کدپستی را می‌گیرد) |
-| Tiling | صفحه در دو تایل هم‌پوشان OCR می‌شود تا متن ریز از دست نرود |
-| بهبود تصویر | حذف واترمارک سربرگ، بازیابی پاورقی کم‌رنگ، باز کردن متن مهرهای دایره‌ای |
-| جدول | تشخیص جدول خط‌دار (حتی با سرستون تیره) و OCR سلول‌به‌سلول |
-| فاکتور | نگاشت ستون‌ها، معادلات `مقدار × فی = مبلغ`، تخفیف، مالیات، خالص، جمع کل سند؛ اصلاح یک‌رقمی فقط وقتی یکتاست |
-| قواعد متنی | نرمال‌سازی حروف و ارقام، checksum کد ملی/شناسه ملی/شبا/کدپستی، تاریخ جلالی، معادله سرمایه/سهام، دیکشنری سازمان (اختیاری) |
-| خروجی | `txt`، `json` و گزارش HTML مرور انسانی |
-| API | FastAPI با Swagger UI آفلاین، کلید API اختیاری، محدودیت حجم آپلود |
+On Windows:
 
-## نتیجه‌ها
-
-ارزیابی روی ۸ سند (۶ فاکتور و ۲ نامه؛ ۲۷ صفحه) با ground truth دستی، اجرای ۲۰۲۶-۱۱-۰۹ با متریک‌های اصلاح‌شده.
-جزئیات: [`reports/metrics_report.md`](reports/metrics_report.md).
-
-| متریک (۶ سند ۱ تا ۲ صفحه‌ای) | Indra خام | **این پروژه** |
-|---|---|---|
-| Word Accuracy ↑ | 74.2٪ | **83.9٪** |
-| WER بدون‌ترتیب ↓ | 25.8٪ | **16.3٪** |
-| SER ↓ | 67.0٪ | **45.6٪** |
-| دقت اعداد (≥۴ رقم) ↑ | 24.5٪ | **78.4٪** (بدون ماسک GT: ۶۸٫۱٪) |
-
-| سایر سنجه‌ها | Indra خام | **این پروژه** |
-|---|---|---|
-| دقت اعداد ≥۴ رقم، جمع ۸ سند | 11.3٪ | **92.4٪** (*) (بدون ماسک GT: ۸۷٫۰٪) |
-| فیلدهای نامه‌ها (بدون دیکشنری) | ۵ از ۲۱ | **۱۵ از ۲۱** |
-| سازگاری معادلات فاکتور | — | ۸۸٪ بدون اصلاح، ۹۶٪ با اصلاح خودکار |
-
-(*) این عدد را دو فاکتور چندصفحه‌ای (۲۷۱۵۳ با ۱۵ صفحه و ۲۹۴۰۵ با ۵ صفحه) غالب کرده‌اند. عدد نماینده‌ی
-اسناد معمولی همان **۷۸٪** جدول اول است.
-
-مقایسه با مدل‌های دیگر روی ۳ سند دارای GT ([`reports/model_comparison.md`](reports/model_comparison.md)):
-
-| مدل | Word Acc ↑ | SER (adj) ↓ | دقت اعداد ↑ |
-|---|---|---|---|
-| این پروژه (بدون دیکشنری) | 68.9٪ | 52.6٪ | 63.2٪ |
-| Claude | 73.4٪ | 52.6٪ | 67.6٪ |
-| Gemini | 74.0٪ | 56.9٪ | 64.7٪ |
-| Chandra | 59.3٪ | 67.9٪ | 35.3٪ |
-
-**ماسک GT:** با گالری خطاها (`python -m evaluation errors`) هر عدد اشتباه با دیدن برش تصویر قضاوت شد
-(۶۵ مورد): ۳۵ خطای واقعی OCR، ۲۱ مورد «GT اشتباه» (مثلاً کدپستی `…411` که روی سند `…410` است) و ۹ مورد
-«نامفهوم یا روی سند چاپ‌نشده» (مثل مالیات‌های محاسبه‌شده‌ی GT یا خط‌های `[تطبیق دیکشنری …]`). این ۳۰ عدد
-هنگام ارزیابی از GT ماسک می‌شوند؛ فایل‌های `eval_data` دست‌نخورده‌اند و قضاوت‌ها در
-[`evaluation/number_verdicts.json`](evaluation/number_verdicts.json) ثبت‌اند. ماسک برای همه‌ی مدل‌ها یکسان
-است و هیچ عدد درستی را از دست نمی‌دهد (تطبیق‌ها ۴۴۰ ⇐ ۴۴۰).
-
-**هشدار صادقانه:**
-
-- ۷ سند از ۸ سند همان‌هایی هستند که پایپ‌لاین روی آن‌ها تنظیم شد؛ اعداد **in-sample و خوش‌بینانه‌اند**.
-- ground truth خودش خطا دارد (مثلاً شناسه خریدار در GT همه‌ی فاکتورها با جابه‌جایی ۹ و ۴ نوشته شده و checksum
-  ندارد). متریک `SER (adjusted)` خطوط شناسه‌دار با checksum نامعتبر را کنار می‌گذارد.
-- «۹۶٪ معادلات برقرار» یعنی اعداد با هم **سازگارند**، نه اینکه هر رقم تضمین‌شده درست است.
-- نسخه‌های قبلی این README عددهای بهتری داشتند (SER ۳۳٪، فیلدها ۱۷ از ۲۱) که حاصل خطای متریک‌ها بود؛ بخش
-  [تغییرات بازبینی ۲۰۲۶-۱۱-۰۹](#تغییرات-بازبینی-۲۰۲۶-۱۱-۰۹) را ببینید.
-
-## پیش‌نیازها
-
-- Windows 10/11 (روی لینوکس هم باید کار کند ولی `run.bat` و دستورهای این راهنما برای ویندوزند)
-- Python **3.12**
-- حدود ۴۰۰ مگابایت فضا (محیط مجازی + ~۱۰۰ مگابایت وزن مدل)
-- CPU؛ GPU لازم نیست و استفاده نمی‌شود
-
-## نصب
-
-```bat
-:: ۱. محیط مجازی و وابستگی‌ها
+```powershell
 python -m venv .venv
-.venv\Scripts\pip install --no-deps -r requirements.lock
-
-:: ۲. وزن‌های مدل Indra در پوشه indra-ocr\
-.venv\Scripts\hf download datalab-to/indra-ocr --local-dir indra-ocr
+.\.venv\Scripts\python.exe -m pip install --no-deps -r requirements.lock
+.\.venv\Scripts\hf.exe download datalab-to/indra-ocr --local-dir indra-ocr
 ```
 
-با [uv](https://docs.astral.sh/uv/) (کش روی درایو D):
+Set `PERSIAN_OCR_MODEL_DIR` if the weights are elsewhere. The package uses `.cache/` in this repository for its temporary files and sets `HF_HOME` there when that variable is unset. The application does not require an internet connection after installation and model download.
 
-```bat
-set UV_CACHE_DIR=D:\uv_cache
-uv venv --python 3.12 .venv
-uv pip install --no-deps -r requirements.lock --python .venv\Scripts\python.exe
+`requirements.txt` is an unpinned reference list. Use `requirements.lock` with `--no-deps` for the tested dependency set.
+
+## Quick start
+
+```powershell
+.\.venv\Scripts\python.exe -m persian_ocr run samples/invoice-sample.png --out output/demo
 ```
 
-اگر مدل‌ها جای دیگری هستند، مسیرشان را در `PERSIAN_OCR_MODEL_DIR` بگذارید.
+The command writes `invoice-sample.txt`, `invoice-sample.json`, and `invoice-sample.html` to `output/demo/`. The bundled sample is synthetic. Open the HTML file to compare the page image with extracted text and review items.
 
-> **قاعده‌ی محیطی:** هیچ فایل موقت، کش یا مدلی روی درایو C نوشته نمی‌شود. وارد کردن بسته‌ی `persian_ocr`،
-> `TEMP`/`TMP` را به `.cache/tmp` و `HF_HOME` را به `.cache/huggingface` داخل پروژه می‌برد.
-> جزئیات ماشین: [`docs/environment.md`](docs/environment.md).
+The shortcut `run.bat <file>` runs the same CLI with the local virtual environment. Running `python -m persian_ocr <file>` is equivalent to the `run` subcommand.
 
-## شروع سریع
+### CLI options
 
-```bat
-run.bat "files\پیوست 14.pdf"
+```text
+python -m persian_ocr run <file> [--out DIR] [--max-pages N] [--no-lexicon] [--no-html] [--no-tables] [--preprocess MODE]
+python -m persian_ocr debug <file> [--page N]
+python -m persian_ocr serve [--host HOST] [--port PORT]
 ```
 
-یا مستقیم:
+`MODE` is one of `original`, `sharpen`, `sharpen_light`, `connect`, or `soft_light`. `--no-tables` disables table and invoice extraction for comparisons; ordinary line OCR still runs. `debug` writes a page-level invoice inspection under `.cache/debug/`.
 
-```bat
-.venv\Scripts\python.exe -m persian_ocr "eval_data\18185.pdf" --max-pages 1
+## Web UI
+
+Start the local server:
+
+```powershell
+.\.venv\Scripts\python.exe -m persian_ocr serve --host 127.0.0.1 --port 8000
 ```
 
-خروجی‌ها در `output\` ساخته می‌شوند: `18185.txt`، `18185.json` و `18185.html`. فایل HTML را در مرورگر باز کنید
-تا تصویر هر صفحه را کنار متن، با اصلاح‌ها (سبز)، موارد مشکوک (نارنجی) و خطوط کم‌اطمینان (قرمز) ببینید.
+Open [http://127.0.0.1:8000/app](http://127.0.0.1:8000/app). Upload one or more images or PDFs, drop files onto the page, or paste an image. Jobs run one at a time. The organization lexicon is off in the Web UI by default so that the raw model behavior is easier to assess.
 
-سرعت: ۲ تا ۵ ثانیه برای هر صفحه روی CPU با ۴ ریسه (صفحه‌های پرجدول کندترند).
+The default result view places recognized lines and table cells at their detected coordinates beside the image actually sent to OCR. You can switch to continuous text, adjust the layout zoom, compare the OCR input with the original image, and download the current page as a standalone positioned HTML file. Copying the page copies plain OCR text. The layout is approximate: missed text, wrong boxes, and incorrect table boundaries cannot be reconstructed from the OCR result. See the [layout guide](docs/layout-web-ui.md).
 
-## خط فرمان
+Select an image preprocessing mode before adding files. The selection is saved with each queued file. `original` remains the default because the experimental modes have regressed verified financial amounts. The [preprocessing guide](docs/preprocessing-web-ui.md) records those controls.
 
-| دستور | کار |
-|---|---|
-| `python -m persian_ocr <فایل>` | OCR کامل و ذخیره‌ی خروجی‌ها در `output/` (همان `run`) |
-| `python -m persian_ocr run <فایل> [--out پوشه] [--max-pages N] [--no-lexicon] [--no-html] [--no-tables]` | اجرا با گزینه‌ها؛ `--no-tables` استخراج جدول و فاکتور را برای آزمون خاموش می‌کند |
-| `python -m persian_ocr debug <فاکتور.pdf> --page 2` | جدول و نتیجه‌ی معادلات یک صفحه در `.cache/debug/` |
-| `python -m persian_ocr serve [--host H] [--port P]` | اجرای API با Swagger UI روی `/docs` |
+The Web UI also offers TXT and JSON downloads. Its JSON includes page geometry under `layout`; the standard `/ocr` response does not include Web UI layout data.
 
-`run.bat` همان `python -m persian_ocr` است با پایتون محیط مجازی.
+## HTTP API
 
-## استفاده از کد پایتون
+The server exposes Swagger UI at `/docs` and these main endpoints:
+
+| Endpoint | Result |
+| --- | --- |
+| `POST /ocr` | Full page text, corrections, review items, tables, and invoice fields |
+| `POST /ocr/text` | Final text for each page |
+| `POST /ocr/review` | Human-review HTML |
+| `POST /ocr/download?format=txt\|json\|html\|zip` | Named output files |
+| `POST /validate/national-id`, `/validate/legal-id`, `/validate/iban`, `/validate/postal-code` | Deterministic validation and conservative correction |
+| `POST /text/postprocess`, `/text/normalize` | Text-processing rules |
+| `POST /invoice/verify-item` | Invoice-row equation checks |
+| `GET /health` | Service status |
+
+OCR endpoints accept `lexicon`, `tables`, `max_pages`, and `preprocess`. The API defaults are `lexicon=true`, `tables=true`, `max_pages=0` (all pages), and `preprocess=original`. The Web UI uses `lexicon=false` by default. To compare line OCR without table extraction, set `tables=false`.
+
+```bash
+curl -F "file=@samples/invoice-sample.png" "http://127.0.0.1:8000/ocr?lexicon=false"
+curl -F "file=@samples/invoice-sample.png" -OJ "http://127.0.0.1:8000/ocr/download?format=zip"
+```
+
+By default `serve` listens on `0.0.0.0:8000` and has no authentication. For local use, bind to `127.0.0.1`. For network access, set `PERSIAN_OCR_API_KEY` and send it in the `X-API-Key` header. Uploaded files are kept in `.cache/tmp` only during processing, then removed. OCR requests are serialized because the model state is shared. The upload limit controls file bytes, not decoded image size or PDF work.
+
+## Python API
 
 ```python
-from persian_ocr.config import PipelineConfig
+from persian_ocr.config import PipelineConfig, PreprocessMode
 from persian_ocr.engine import OcrEngine
 from persian_ocr.pipeline import process_document
 
 engine = OcrEngine.load(threads=4)
-result = process_document(engine, "eval_data/18185.pdf", PipelineConfig(use_lexicon=False))
-
+config = PipelineConfig(use_lexicon=False, preprocess=PreprocessMode.original)
+result = process_document(engine, "samples/invoice-sample.png", config)
 page = result["pages"][0]
-page["text_dedup"]           # متن نهایی: جدول به‌صورت markdown + خطوط بیرون جدول، بدون تکرار
-page["text"]                 # همه‌ی خطوط OCR با اصلاح‌ها
-page["corrections"]          # اصلاح‌های خودکار (ورودی ← خروجی)
-page["review_queue"]         # موارد نیازمند مرور انسانی (شناسه مبهم، تاریخ ناقص، reading_conflict)
-page["low_confidence_lines"] # خطوط با اطمینان کمتر از low_conf
-page["invoice"]["items"]     # اقلام فاکتور: مقدار، فی، مبلغ، مالیات، خالص
-page["invoice"]["checks"]    # وضعیت هر معادله: ok / corrected / mismatch
+print(page["text_dedup"])
+print(page["review_queue"])
 ```
 
-گزینه‌های `PipelineConfig`:
+`text_dedup` combines table rows and lines outside tables without their usual duplicates. `text` contains normalized line readings. `corrections`, `review_queue`, `low_confidence_lines`, `tables_markdown`, and `invoice` hold the additional evidence. `invoice` may be `null` when no invoice is recognized. `PipelineConfig.baseline(tiling=False)` provides a less engineered comparison path.
 
-| فیلد | پیش‌فرض | معنی |
-|---|---|---|
-| `dpi` | `300` | وضوح رندر PDF |
-| `tiling` | `True` | OCR در دو تایل هم‌پوشان |
-| `overlap_ratio` | `0.18` | سهم هم‌پوشانی تایل‌ها |
-| `engineered` | `True` | جهت‌یابی، Force-RTL، بهبودهای تصویری و قواعد متنی |
-| `tables` | `True` | استخراج جدول خط‌دار و فاکتور |
-| `header_fraction` | `0.30` | سهم بالای صفحه که واترمارکش حذف می‌شود |
-| `low_conf` | `0.75` | آستانه‌ی خط کم‌اطمینان |
-| `use_lexicon` | `True` | اعمال دیکشنری سازمان (`persian_ocr/data/domain_lexicon.json`) |
-| `max_pages` | `0` | حداکثر صفحه (۰ = همه) |
+## Docker
 
-`PipelineConfig.baseline(tiling=False)` خط پایه (Indra خام) را برای مقایسه می‌دهد.
-
-## سرویس HTTP و Swagger
-
-```bat
-run.bat serve                                                   :: 0.0.0.0:8000 (روی شبکه باز)
-.venv\Scripts\python.exe -m persian_ocr serve --host 127.0.0.1 --port 9000
-```
-
-Swagger UI: `http://127.0.0.1:8000/docs`. فایل‌های Swagger داخل پروژه‌اند و بدون اینترنت هم باز می‌شود.
-از ماشین دیگر، آدرس شبکه‌ای که هنگام شروع چاپ می‌شود را باز کنید.
-
-### وب‌اپ آزمون تصویر: `http://127.0.0.1:8000/app`
-
-صفحه‌ای برای آزمایش دستی با تصویر یا PDF خودتان (بدون اینترنت و بدون CDN؛ فقط همین سرویس). فایل (یا چند فایل) را بیندازید، انتخاب
-کنید یا از کلیپ‌بورد paste کنید؛ یکی‌یکی پردازش می‌شوند و برای هر صفحه تصویر اصلی (قابل چرخش و بزرگ‌نمایی) کنار خروجی
-می‌آید، با هایلایت اصلاح‌ها و موارد مشکوک (`reading_conflict` هم)، خطوط کم‌اطمینان و فاکتور ساختاریافته. `txt` و `json` از
-همان صفحه با نام فایل ورودی دانلود می‌شوند (برای `html` و `zip` از `/ocr/download` استفاده کنید). دیکشنری سازمان به‌طور پیش‌فرض
-**خاموش** است تا دقت واقعی دیده شود. فایل بعد از پردازش پاک می‌شود. اگر `PERSIAN_OCR_API_KEY` تنظیم شده باشد، خود صفحه باز می‌شود
-ولی فیلد «کلید API» ظاهر می‌شود و بدون آن پردازش ۴۰۱ می‌دهد. پردازش‌ها پشت `ocr_lock` سریال‌اند (هم‌زمان فقط یک OCR اجرا می‌شود).
-
-| Endpoint | کار |
-|---|---|
-| `POST /ocr` | آپلود PDF یا تصویر ← متن، جدول، فاکتور، اصلاح‌ها، صف مرور |
-| `POST /ocr/text` | فقط متن نهایی هر صفحه |
-| `POST /ocr/review` | گزارش HTML مرور انسانی |
-| `POST /ocr/download?format=txt\|json\|html\|zip` | دانلود خروجی با **نام فایل ورودی** (`18185.pdf` ← `18185.txt`) |
-| `POST /validate/national-id`، `/validate/legal-id`، `/validate/iban`، `/validate/postal-code` | checksum و اصلاح محافظه‌کارانه (بدون مدل) |
-| `POST /text/postprocess`، `POST /text/normalize` | قواعد متنی روی هر متن |
-| `POST /invoice/verify-item` | معادلات یک ردیف فاکتور |
-| `GET /health` | وضعیت سرویس (بدون احراز هویت) |
-
-همه‌ی endpointهای OCR پارامترهای `lexicon` (پیش‌فرض `true`)، `max_pages` (۰ تا ۵۰۰) و `tables` (پیش‌فرض `true`؛ `false` جدول و فاکتور را برای آزمون خاموش می‌کند) را می‌گیرند. در صفحه‌ی `/app` همین گزینه تیک «جدول و فاکتور» است.
-
-```bat
-curl -F "file=@eval_data/18185.pdf" "http://127.0.0.1:8000/ocr?lexicon=false"
-curl -F "file=@eval_data/18185.pdf" -OJ "http://127.0.0.1:8000/ocr/download?format=zip"
-curl -H "Content-Type: application/json" -d "{\"value\":\"349838389\"}" http://127.0.0.1:8000/validate/national-id
-```
-
-**نکته‌های استقرار:**
-
-- **امنیت:** پیش‌فرض بدون احراز هویت و روی همه‌ی کارت‌های شبکه است. برای محدود کردن، قبل از `serve`
-  `set PERSIAN_OCR_API_KEY=<رمز>` را بزنید و در درخواست‌ها هدر `X-API-Key` را بفرستید (در Swagger دکمه‌ی
-  Authorize). برای دسترسی فقط محلی: `--host 127.0.0.1`.
-- **فایروال ویندوز** (با دسترسی Administrator):
-  `netsh advfirewall firewall add rule name="Persian OCR API" dir=in action=allow protocol=TCP localport=8000`
-- **همزمانی:** درخواست‌های OCR پشت سر هم اجرا می‌شوند (موتور حالت مشترک دارد). برای بار زیاد چند نمونه‌ی
-  سرویس، هر کدام با موتور خودش، اجرا کنید.
-- **حریم خصوصی:** فایل آپلودی فقط در طول درخواست در `.cache/tmp` نگه داشته و بعد پاک می‌شود.
-
-## اجرا با Docker
-
-یک ایمیج که هم **رابط وب** و هم **API سرویس** را روی پورت ۸۰۰۰ می‌دهد. مدل‌ها داخل ایمیج‌اند و در زمان اجرا
-اینترنت لازم نیست.
-
-```bat
-:: ساخت و اجرا (وزن‌های مدل هنگام build از Hugging Face با revision ثابت دانلود می‌شوند؛ اینترنت فقط برای build لازم است)
-docker compose up -d --build
-
-:: با کلید API و پورت دیگر
-set PERSIAN_OCR_API_KEY=<رمز>
-set PERSIAN_OCR_PORT=9000
-docker compose up -d --build
-```
-
-`requirements.lock` نسخه‌ی دقیق همه‌ی بسته‌هاست (همان محیطی که دقت با آن سنجیده شده). `requirements.txt` به‌تنهایی
-نصب نمی‌شود: `opencv-python-headless 5.0.0.93` در metadata خود `numpy>=2` می‌خواهد ولی پروژه با `numpy 1.26.4` سنجیده
-شده است؛ برای همین نصب از lock و با `--no-deps` است.
-
-### ایمیج آماده از GitHub (GHCR)
-
-با هر push روی `main`، workflow `.github/workflows/docker.yml` تست‌های واحد را اجرا می‌کند، ایمیج را با Docker واقعی
-می‌سازد، کانتینر را بالا می‌آورد و تا `healthy` صبر می‌کند، `/app` و `/docs` و OCR واقعی روی `deploy/test-invoice.png`
-(با جدول و بدون جدول) را می‌سنجد و فقط اگر همه قبول بود ایمیج را منتشر می‌کند:
-`ghcr.io/ai-transformation-team/ocr:latest` (و `:0.2.0` و `:sha-<commit>`).
-
-مخزن خصوصی است؛ برای pull یک Personal Access Token با دسترسی `read:packages` لازم است:
-
-```bat
-echo <TOKEN> | docker login ghcr.io -u <github-username> --password-stdin
-docker pull ghcr.io/ai-transformation-team/ocr:latest
-cd deploy
-set PERSIAN_OCR_IMAGE=ghcr.io/ai-transformation-team/ocr:latest
-docker compose up -d
-```
-
-### استقرار روی PC یا سرور دیگر (بدون ساخت)
-
-ایمیج آماده در `deploy\persian-ocr-0.2.0.tar` است (۵۲۵ مگابایت، linux/amd64). کل پوشه‌ی `deploy\` را کپی کنید:
-
-| فایل | کار |
-|---|---|
-| `persian-ocr-0.2.0.tar` | ایمیج |
-| `docker-compose.yml` | اجرا از روی ایمیج (بدون build) |
-| `check.ps1` / `check.sh` | بررسی سلامت: load، اجرا، صبر تا `healthy`، `/app` و یک OCR واقعی روی `test-invoice.png` |
-| `test-invoice.png` | فاکتور مصنوعی برای آزمون |
-
-```bat
-cd deploy
-powershell -ExecutionPolicy Bypass -File check.ps1        :: باید با «OK: healthy ...» تمام شود
-docker compose up -d                                      :: اجرای دائمی
-```
-
-روی لینوکس: `sh check.sh` و بعد `docker compose up -d`. اولین شروع حدود ۳۰ تا ۶۰ ثانیه طول می‌کشد (بارگذاری مدل).
-
-ساخت دوباره‌ی همین فایل روی این ماشین (بدون Docker؛ همه‌ی دانلودها روی D):
-`.venv\Scripts\python.exe tools\build_image_tar.py`. اسکریپت ایمیج پایه را مستقیم از Docker Hub می‌گیرد، digest همه‌ی لایه‌ها را
-چک می‌کند، و قبل از نوشتن بررسی می‌کند که هر کتابخانه‌ی سیستمی که بسته‌ها لازم دارند در ایمیج باشد، نسخه‌ی glibc کافی باشد،
-همه‌ی importهای کد نصب باشند، فایل‌های مدل کامل باشند و هیچ داده‌ی محرمانه‌ای داخلش نباشد.
-
-بدون compose:
-
-```bat
-docker build -t persian-ocr:0.2.0 .
-docker run -d --name persian-ocr -p 8000:8000 -e PERSIAN_OCR_API_KEY=<رمز> persian-ocr:0.2.0
-```
-
-| آدرس | کاربرد |
-|---|---|
-| `http://HOST:8000/app` | رابط وب: آپلود فایل، تصویر صفحه کنار متن، تیک «جدول و فاکتور» و «دیکشنری سازمان»، دانلود txt و json |
-| `http://HOST:8000/docs` | Swagger و آزمایش endpointها |
-| `POST http://HOST:8000/ocr`، `/ocr/text`، `/ocr/download`، `/validate/*`، `/text/*`، `/invoice/verify-item` | استفاده‌ی سرویس در محصول (بخش [سرویس HTTP و Swagger](#سرویس-http-و-swagger)) |
-| `GET http://HOST:8000/health` | health check (داکر هم هر ۳۰ ثانیه از همین استفاده می‌کند) |
+The root Compose file builds a CPU image with the model weights and exposes the API and Web UI on port 8000:
 
 ```bash
-curl -H "X-API-Key: <رمز>" -F "file=@invoice.pdf" "http://HOST:8000/ocr/text?lexicon=false"
+docker compose up -d --build
 ```
 
-- **منابع:** حدود ۱ تا ۲ گیگابایت رم هنگام OCR؛ `docker-compose.yml` سقف ۳ گیگابایت می‌گذارد. ۲ تا ۵ ثانیه برای هر صفحه.
-- **همزمانی:** هر کانتینر در هر لحظه یک OCR انجام می‌دهد؛ برای بار بیشتر چند کانتینر پشت یک load balancer.
-- **امنیت:** بدون `PERSIAN_OCR_API_KEY` هر کسی که به پورت دسترسی دارد می‌تواند OCR بگیرد. در محصول حتماً کلید بگذارید.
-- **محتوای ایمیج:** فقط `persian_ocr/`، `evaluation/` (رابط وب از آن استفاده می‌کند) و وزن‌های لازم مدل. اسناد سازمان،
-  ground truth، قضاوت‌های اعداد، کش‌ها و وزن‌های ریاضی Indra (`math_*`) داخل ایمیج **نیستند** (`.dockerignore`).
-  مجوز Indra (`indra-ocr/LICENSE`، OpenRAIL-M) همراه ایمیج است.
-- **ذخیره‌سازی:** فایل‌های آپلودی فقط در طول درخواست داخل کانتینر می‌مانند؛ volume لازم نیست.
-- **روی این ویندوز:** Docker Desktop داده‌هایش را به‌طور پیش‌فرض روی درایو C می‌گذارد. طبق قاعده‌ی پروژه، هنگام نصب
-  مسیر داده را روی D بگذارید (`--wsl-default-data-root=D:\Docker\wsl`) یا ایمیج را روی سروری که Docker دارد بسازید.
+The build downloads a pinned Indra model revision. Runtime OCR does not require internet access. Set `PERSIAN_OCR_API_KEY` and, if needed, `PERSIAN_OCR_PORT` in the environment before starting Compose. Review the network binding before exposing the service.
 
-## خروجی‌ها
+The workflow in `.github/workflows/docker.yml` runs unit tests, builds an image, starts it, checks `/app` and `/docs`, performs OCR on the synthetic `deploy/test-invoice.png` with and without table extraction, and pushes GHCR tags only if those steps pass. The image name is `ghcr.io/ai-transformation-team/ocr`; registry access depends on the repository and package permissions.
 
-| فایل | محتوا |
-|---|---|
-| `<نام>.txt` | متن نهایی هر صفحه (`text_dedup`) |
-| `<نام>.json` | نتیجه‌ی کامل: متن خام و اصلاح‌شده‌ی هر صفحه، اصلاح‌ها، صف مرور، خطوط کم‌اطمینان، جدول‌ها، فاکتور |
-| `<نام>.html` | تصویر هر صفحه کنار متن، با رنگ‌بندی اصلاح‌ها و موارد مشکوک |
+`deploy/docker-compose.yml` can run a prebuilt image. `deploy/check.ps1` and `deploy/check.sh` load or start it, wait for health, and run a real OCR smoke check. The optional image tarball is generated locally; it is not tracked in Git.
 
-## متغیرهای محیطی
+## Outputs and pipeline
 
-| متغیر | پیش‌فرض | کاربرد |
-|---|---|---|
-| `PERSIAN_OCR_MODEL_DIR` | `indra-ocr/` | پوشه‌ی وزن‌های مدل |
-| `PERSIAN_OCR_API_KEY` | خالی (بدون احراز هویت) | کلید هدر `X-API-Key` |
-| `PERSIAN_OCR_MAX_UPLOAD_MB` | `100` | حداکثر حجم آپلود |
-| `PERSIAN_OCR_HOST` | `0.0.0.0` | میزبان پیش‌فرض `serve` |
-| `PERSIAN_OCR_PORT` | `8000` | پورت پیش‌فرض `serve` |
-| `HF_HOME` | `.cache/huggingface` | کش HuggingFace (فقط اگر از قبل تنظیم نشده باشد) |
+| Output | Contents |
+| --- | --- |
+| `<name>.txt` | Final `text_dedup` per page |
+| `<name>.json` | Raw and processed text, corrections, review queue, low-confidence lines, tables, and invoice data |
+| `<name>.html` | Page image beside extracted text and review evidence |
+| Web UI layout HTML | Positioned text for one page, exported from `/app` |
 
-## پایپ‌لاین
+The main processing path is:
 
-```
-PDF / تصویر
-   │  pdfio.py            رندر صفحه (۳۰۰ dpi، خاکستری)
-   ▼
-orientation.py            هر ۴ جهت امتحان؛ بهترین انتخاب + رفع کجی
-   │
-   ▼  engine.force_rtl()  همه‌ی خطوط به recognizer راست‌به‌چپ
-tiling.py + vision/       دو تایل هم‌پوشان؛ حذف واترمارک سربرگ؛ پاورقی کم‌رنگ؛ مهر دایره‌ای
-   │
-   ├──► tables/           سلول‌های جدول خط‌دار (سرستون تیره هم) ← جدول سطر/ستون‌دار
-   │         │
-   │         ▼
-   │      invoice/        نگاشت ستون‌ها، معادلات، اصلاح یک‌رقمی، جمع کل سند
-   ▼
-text/                     نرمال‌سازی، checksum، تاریخ، معادله حسابداری، دیکشنری سازمان
-   │
-   ▼
-report/                   txt + json + HTML مرور انسانی
+```text
+PDF or image
+  -> grayscale page rendering
+  -> optional preprocessing
+  -> orientation and skew correction
+  -> overlapping tile OCR and targeted recovery
+  -> ruled-table detection and cell OCR
+  -> text normalization and invoice checks
+  -> TXT, JSON, and HTML
 ```
 
-**هشدار تعارض خوانش (`reading_conflict`):** وقتی عددی در خط صفحه با عدد همان سلول فقط در چند رقم فرق دارد
-(مثل `٣٬٢٠٠٬٠٠٠` در برابر `٢٬٢٠٠٬٠٠٠`)، قبلاً خط «تکراری» حساب می‌شد و کنار می‌رفت (حتی اگر درست بود). حالا یک مورد
-`reading_conflict` با هر دو خوانش به `review_queue` می‌رود و **متن خروجی تغییر نمی‌کند**. روی ۸ سند: ۸۶ تعارض، ۲۰ مورد
-«خط درست، سلول غلط» و ۳۷ هشدار الکی (دقت ≈ ۳۵٪)؛ اطمینان خوانش‌ها آن‌ها را جدا نمی‌کند. فقط «ببین» می‌گوید، نه «این درست است».
+The [pipeline walkthrough](docs/pipeline-walkthrough.md) traces each stage. `tools/pipeline_visual_report.py` can generate a local HTML report with intermediate images. `tools/descreen_ab_report.py`, `tools/preprocessing_stage_report.py`, and `tools/soft_lighting_report.py` run local comparisons; they do not enable those experimental filters in the default OCR path. Generated reports and user-provided scans stay outside Git.
 
-توضیح هر تکنیک همراه با مشکل دیده‌شده و شواهد: [`docs/techniques.md`](docs/techniques.md).
-توضیح هر فایل و هر تابع (ورودی، خروجی، آستانه‌ها و دلیل هر تصمیم): [`docs/code-reference.md`](docs/code-reference.md)
-و نسخه‌ی HTML قابل جست‌وجو `docs/code-reference.html` (ساخت دوباره: `python tools/build_code_reference.py`).
-خلاصه‌ی همه‌ی کارها، نتایج، اصلاح حرف‌های غلط قبلی، کارهای باز و دام‌های محیط: [`docs/project-memory.md`](docs/project-memory.md).
+## Evaluation and tests
 
-## ساختار پروژه
+Earlier in-sample evaluation covered eight documents and 27 pages. On six shorter documents, reported word accuracy improved from 74.2% for the Indra baseline to 83.9% for this pipeline; unordered WER changed from 25.8% to 16.3%. These results are historical, mostly on documents used during development, and should not be treated as out-of-sample performance. Some ground-truth numbers required manual verdicts or masking. Equation consistency is not OCR accuracy. The evaluation code is under `evaluation/`; generated reports and private ground truth are not tracked.
 
-```
-persian_ocr/               بسته‌ی اصلی
-  config.py                مسیرها، تنظیم محیط (همه‌چیز داخل پروژه)، PipelineConfig
-  engine.py                OcrEngine: بارگذاری مدل‌های ONNX، force_rtl
-  pdfio.py                 خواندن صفحه از PDF/تصویر، پیش‌نمایش JPEG
-  orientation.py           جهت‌یابی مبتنی بر OCR
-  tiling.py                تایل‌ها و ادغام خطوط
-  pipeline.py              ocr_document / process_document
-  cli.py, __main__.py      خط فرمان
-  vision/                  watermark، footer، stamps
-  tables/                  cells، dark، lines، extract، models
-  text/                    normalize، validators، correction، dates، accounting، lexicon، postprocess
-  invoice/                 numbers، columns، equations، header، parser، document
-  report/                  html، files
-  api/                     app، deps، uploads، downloads، schemas، server، routes/، static/swagger/
-  data/domain_lexicon.json دیکشنری موجودیت‌های سازمان
-evaluation/                متریک‌ها، کش خروجی‌ها، گزارش، دقت فیلدها، مقایسه‌ی مدل‌ها، داشبورد، گالری خطا
-tests/                     تست‌های واحد (بدون نیاز به مدل)
-docs/                      مرجع کد، تکنیک‌ها، طراحی اولیه، قوانین محیط
-tools/                     ساخت مرجع HTML کد؛ تست‌های jsdom داشبورد و گالری خطا
-reports/                   گزارش‌های تولیدشده توسط evaluation
-samples/                   invoice-sample.png: فاکتور مصنوعی (۹۰ درجه چرخیده، واترمارک، مهر) برای تست و راهنما
-indra-ocr/                 وزن‌های مدل (دانلودی، در git نیست)
-files/, eval_data/         اسناد سازمان و ground truth (محرمانه، در git نیست)
-.cache/, output/           کش، فایل موقت و خروجی اجراها (قابل حذف)
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -t .
 ```
 
-## ارزیابی
+Tests that need local Indra weights or user-provided images skip when those assets are unavailable. Optional browser smoke checks in `tools/` require `jsdom` installed under `.cache/nodetools`.
 
-| دستور | خروجی |
-|---|---|
-| `python -m evaluation` یا `python -m evaluation metrics [--refresh]` | `reports/metrics_report.md` و `.json` روی `eval_data/` |
-| `python -m evaluation fields` | `reports/fields_report.md`: دقت فیلدهای نامه‌ها |
-| `python -m evaluation compare` | `reports/model_comparison.md`: مقایسه با Claude، Gemini، Chandra، Lift |
-| `python -m evaluation errors [--lexicon] [--remaining]` | `reports/number_errors.html`: برش تصویر، خوانش ما و GT کنار هم برای هر عدد اشتباه و قضاوت هر مورد؛ `--remaining` اعداد ماسک‌شده را نشان نمی‌دهد |
-| `python -m evaluation dashboard [--refresh] [--lexicon] [--dir پوشه]` | `reports/dashboard.html`: تصویر هر صفحه (قابل چرخش) کنار خروجی مدل |
+## Known limitations
 
-- **داده:** هر `X.pdf` در `eval_data/` کنار `X.txt` (متن درست). GT بازنویسی ساختاریافته است، نه رونویسی خط‌به‌خط.
-- **متریک‌ها:** Word Accuracy/Precision/F1، WER و CER (ترتیب‌دار و بدون‌ترتیب)، SER، دقت اعداد. تعریف دقیق
-  هر کدام در [`evaluation/metrics.py`](evaluation/metrics.py).
-- **WER/CER ترتیب‌دار عمداً بدبینانه است** چون ترتیب GT با ترتیب سند فرق دارد؛ برای قضاوت از متریک‌های
-  بدون‌ترتیب و SER استفاده کنید.
-- حالت مهندسی‌شده همیشه **بدون دیکشنری سازمان** ارزیابی می‌شود تا عدد مصنوعی بالا نرود.
-- **ماسک GT:** `evaluation/groundtruth.py` هنگام خواندن GT، اعدادی را که در `evaluation/number_verdicts.json` با
-  دیدن تصویر «GT اشتباه» یا «نامفهوم» قضاوت شده‌اند حذف می‌کند (فقط در حافظه). `metrics`، `compare` و
-  `errors --remaining` از آن استفاده می‌کنند.
-- خروجی‌های OCR در `.cache/hyps` و `.cache/dashboard` کش می‌شوند. کلید کش اندازه و زمان PDF و اثر انگشت کد
-  `persian_ocr` است؛ با تغییر کد خودکار باطل می‌شود. `--refresh` اجرای دوباره را اجباری می‌کند.
+- Unruled tables are not supported, and low-quality scans can lose digits at cell boundaries.
+- Multi-column reading order can change after tile merging. The spatial Web UI view can only position detected text.
+- The invoice document logic assumes that all pages of one PDF belong to one invoice.
+- A failure on one page or table can stop processing of the full document.
+- The model can confuse faint digits and text under opaque stamps. Targeted payable recovery is guarded and limited to the pattern documented in [the recovery note](docs/payable-recovery-result.md).
+- Global image preprocessing can make OCR worse. Keep `original` as the reference when evaluating new scans.
+- Only the first page of a multi-page TIFF is read. The API runs one OCR request at a time.
+- The default network deployment is unauthenticated unless an API key is configured. Upload-byte limits do not cap decoded pixels or PDF complexity.
 
-## تست‌ها
+## License
 
-```bat
-.venv\Scripts\python.exe -m unittest discover -s tests -t .
-```
-
-۲۲۲ تست واحد، بدون نیاز به مدل، حدود ۱۰ تا ۲۰ ثانیه. تست‌های jsdom داشبورد و گالری خطا (اختیاری):
-
-```bat
-npm install --prefix .cache\nodetools jsdom
-node tools\dashboard_smoke.js
-node tools\app_smoke.js
-node tools\errors_smoke.js
-```
-
-## تغییرات بازبینی ۲۰۲۶-۱۱-۰۹
-
-بازبینی کد نشان داد بخشی از «اصلاح‌های خودکار» **حدس** بودند و بخشی از متریک‌ها عدد را بیش از واقع نشان
-می‌دادند. همه‌ی موارد زیر قبل از اصلاح با اجرای مستقیم کد بازتولید شدند و برای هر کدام تست رگرسیون اضافه شد.
-
-**اصلاح‌های غلطی که برطرف شدند:**
-
-| محل | مشکل قبلی | الان |
-|---|---|---|
-| `text/correction.py` | نگاشت ارقام هم‌شکل یک‌طرفه بود (`9→4` بود، `4→9` نبود)؛ کد ملی `1960019392` که ۹ آن ۴ خوانده شده بود به کد ملی **دیگری** (`1960014390`) «اصلاح» می‌شد | نگاشت متقارن؛ رقم درست همیشه کاندید است و اگر یکتا نباشد به مرور می‌رود |
-| `text/accounting.py` | `"1000" in "10000"` درست است؛ ارزش اسمی درست `10000 ریالی` به `1,000` و تعداد سهام به عدد غلط تبدیل می‌شد | ارزش اسمی فقط وقتی اصلاح می‌شود که معادله‌ی سرمایه با `10000` نخورد و با `1000` دقیقاً بخورد؛ اصلاح ثبت می‌شود |
-| `text/dates.py` | `مورخ 1402/053.` بی‌دلیل `1402/05/30` می‌شد؛ `1402.5.40` نرمال می‌شد | روز ناقص با همه‌ی کاندیدها به صف مرور می‌رود؛ ماه/روز خارج از بازه دست نمی‌خورد |
-| `invoice/equations.py` | اولین اصلاح یک‌رقمی برنده بود (همیشه اول «مبلغ»)؛ `qty=3, فی=1000, مبلغ=2000` ← مبلغ `3000` | همه‌ی اصلاح‌های ممکن جمع می‌شوند؛ مالیات/خالص ردیف شاهد است؛ اصلاح غیریکتا ⇒ `mismatch` با کاندیدها |
-| `invoice/equations.py`، `parser.py` | مالیات با `round` پایتون (نصف به زوج): مالیات درست `1235` روی مبلغ `12345` به `1234` «اصلاح» می‌شد؛ نرخ ۱۰٪ همیشه قبل از ۹٪ | ریاضی صحیح با گرد کردن نصف به بالا؛ نرخ فقط وقتی یکتاست انتخاب می‌شود. روی فاکتور ۲۷۱۵۳، ۷ مالیات درست که قبلاً «اصلاح» می‌شدند حالا `ok` هستند |
-| `invoice/numbers.py` | `۲٫۵` ← `25`، `1234.5` ← `12345`، تاریخ `1402/05/12` ← `14020512` | جداکننده فقط با گروه‌بندی سه‌رقمی حذف می‌شود؛ اعشار و تاریخ ⇒ `None` |
-
-**متریک‌هایی که عدد را بیش از واقع نشان می‌دادند:**
-
-| محل | مشکل قبلی | اثر |
-|---|---|---|
-| `evaluation/metrics.py` (SER) | یک توکن خروجی چند خط GT را «درست» می‌کرد | SER اسناد کوتاه از ۳۳٪ به ۴۸٪ رسید (عدد واقعی) |
-| `evaluation/metrics.py` (`has_invalid_id`) | هر عدد ۱۰-۱۱ رقمی (مبلغ، موبایل، کدپستی) «شناسه‌ی غلط GT» بود و از `SER (adjusted)` حذف می‌شد | فقط خطوط دارای برچسب شناسه کنار گذاشته می‌شوند |
-| `evaluation/metrics.py` (`wer_free`) | خطای اسناد مختلف همدیگر را خنثی می‌کرد | خطا برای هر سند جدا جمع می‌شود |
-| `evaluation/metrics.py` | علائم `، ؛ ؟` جزو واژه بودند؛ ورودی خالی `ZeroDivisionError` می‌داد | علائم جدا می‌شوند؛ تقسیم بر صفر محافظت شده |
-| `evaluation/fields.py` | کل متن بدون فاصله و خط جدید چسبانده می‌شد؛ `25000` داخل `250000` «پیدا» می‌شد | جست‌وجو در هر خط با مرز رقمی؛ فیلدها از ۱۷ به ۱۵ از ۲۱ رسید |
-| `evaluation/hypotheses.py`، `dashboard.py` | کش فقط با نام فایل؛ بعد از تغییر کد نتیجه‌ی قدیمی گزارش می‌شد | کلید کش شامل اثر انگشت کد است (`evaluation/cache.py`) |
-
-## مشکلات شناخته‌شده
-
-این موارد هنوز باز هستند:
-
-- `invoice/document.py` فرض می‌کند همه‌ی صفحه‌های یک PDF یک فاکتورند؛ در PDF با چند فاکتور، رأی‌گیری صفحه‌ها
-  شماره و تاریخ فاکتور اقلیت را بازنویسی می‌کند و جمع سند روی همه‌ی فاکتورها حساب می‌شود.
-- `text/normalize.py` نیم‌فاصله (ZWNJ) را از متن خروجی حذف می‌کند (`می‌خواهم` ← `میخواهم`) ولی نشانه‌های جهت
-  (U+200E/U+200F) را نگه می‌دارد؛ کد ملیِ بعد از این نشانه‌ها شناسایی نمی‌شود.
-- `pipeline.py`: خطا در یک جدول یا یک صفحه کل سند را متوقف می‌کند.
-- `data/domain_lexicon.json` به‌طور پیش‌فرض خالی است؛ در صورت افزودن موجودیت‌ها از الگوهای دقیق استفاده کنید چون
-  `use_lexicon` در API و خط فرمان پیش‌فرض روشن است.
-- اگر OCR در هر دو عدد سرمایه و ارزش اسمی یک صفر اضافه بخواند (`250000 میلیارد … 10000 ریالی`)، معادله‌ی سرمایه
-  سازگار به نظر می‌آید و خطا گرفته نمی‌شود.
-
-## محدودیت‌ها
-
-- جدول بدون خط‌کشی پشتیبانی نمی‌شود.
-- در اسکن‌های کم‌کیفیت ارقام کنار مرز سلول بریده می‌شوند (فاکتور ۲۹۶۰۳: دقت اعداد ۴۰٪ بعد از ماسک GT؛ ۱۵ از ۳۵ خطای واقعی OCR).
-- در متن چندستونه، ترتیب خواندن بعد از ادغام تایل‌ها به هم می‌ریزد.
-- تلفن و فکس پاورقی بدون دیکشنری سازمان ناقص‌اند.
-- فقط CPU؛ از TIFF چندصفحه‌ای فقط صفحه‌ی اول خوانده می‌شود.
-- API در هر لحظه فقط یک پردازش OCR اجرا می‌کند.
-
-## گام‌های بعدی
-
-1. سنجش روی اسناد ناآشنا (out-of-sample)؛ بازبینی دستی GT شناسه‌ها و کدپستی‌ها.
-2. حل قیدی با چند کاندید برای هر رقم (به‌جای «فقط یک رقم عوض کن») تا خطای دورقمی هم گرفته شود.
-3. نوشتن اصلاح‌های یکتای ساختار فاکتور در متن خروجی: روی ۳۵ خطای واقعی OCR، در ۱۰ مورد مقدار درست در
-   `invoice` هست ولی در متن (خوانش خام سلول) مانده؛ این تخمین از کش نسخه‌ی قبلی منطق فاکتور است.
-4. خواندن دوباره‌ی ارقام در چند حالت تصویر **اندازه‌گیری شد و کم‌بازده بود**: رأی‌گیری بین ۱۲ حالت فقط +۱۰ از
-   ۵۰۶ عدد (حدود +۲ امتیاز)، سقف آرمانی +۲۶؛ کشیدن افقی تصویر مدل را خراب می‌کند (x×۱٫۳ ⇐ بازیابی ۵۴٪)؛
-   چون recognizer هر برش را به ارتفاع ۳۲ می‌برد، حالت‌ها شواهد مستقل نیستند. موتور دوم مستقل ارزش سنجیدن دارد.
-5. تشخیص جدول بدون خط.
-6. رابط مرور انسانی تعاملی و جمع‌آوری اصلاح‌ها برای دیکشنری سازمان.
-
-## مجوز
-
-وزن‌های Indra تحت **OpenRAIL-M** هستند (رایگان برای پژوهش، استفاده‌ی شخصی و استارتاپ‌های با درآمد کمتر از
-۲۰ میلیون دلار). متن کامل: [`indra-ocr/LICENSE`](indra-ocr/LICENSE).
-**قبل از استقرار سازمانی، وضعیت مجوز باید بررسی شود** یا مجوز تجاری از Datalab گرفته شود.
+Indra model weights have their own [license](https://huggingface.co/datalab-to/indra-ocr). Check its terms before organizational or commercial deployment. The model license is also included with downloaded weights and in the Docker image.

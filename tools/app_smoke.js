@@ -7,7 +7,7 @@ const errors = [], calls = [], alerts = [], downloads = [];
 let active = 0, maxActive = 0;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PX = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
-const page = (n, extra = {}) => ({ page: n, image: PX, size: [200, 400], html: `<div class='l'>متن صفحه ${n}</div>`, notes: n === 1 ? "<div class='box rev'>reading_conflict</div>" : '', invoice: '', stats: { words: 3, tables: 0, corr: 0, rev: n === 1 ? 1 : 0, low: 0 }, ...extra });
+const page = (n, extra = {}) => ({ page: n, image: PX, size: [200, 400], processed_image: PX, processed_size: [200, 400], plain_text: `متن صفحه ${n}`, layout: { size: [200, 400], items: [{ box: [10, 20, 150, 45], text: `متن صفحه ${n}`, conf: 0.9, source: 'line' }], cells: [], tables: [] }, html: `<div class='l'>متن صفحه ${n}</div>`, notes: n === 1 ? "<div class='box rev'>reading_conflict</div>" : '', invoice: '', stats: { words: 3, tables: 0, corr: 0, rev: n === 1 ? 1 : 0, low: 0 }, ...extra });
 const doc = (name, pages) => ({ name, file: name + '.png', time: 1.5, mismatch: 0, focus: 0, pages: Array.from({ length: pages }, (_, i) => page(i + 1)) });
 
 const fakeFetch = async (url, opts = {}) => {
@@ -62,14 +62,18 @@ const file = name => new w.File(['x'], name);
   check('busy box names the file', /multi doc\.png/.test($('#busyT').textContent));
   await sleep(200);
   check('requests run one at a time', maxActive === 1, 'max=' + maxActive);
-  check('request carries options and key', calls[0].url === '/app/run?lexicon=false&tables=true&max_pages=0' && calls[0].key === 'k1');
+  check('request carries options and key', calls[0].url === '/app/run?lexicon=false&tables=true&max_pages=0&preprocess=original' && calls[0].key === 'k1');
   check('states: done, error, error', Q().map(x => x.status).join() === 'done,err,err');
   check('first result opens the viewer', shown('viewer') === 'flex' && shown('busy') === 'none');
   check('image is a data url', /^data:image\/jpeg;base64,/.test($('#img img').src));
   check('page select lists the 3 pages', $$('#pageSel option').length === 3);
-  check('output text is shown', /متن صفحه 1/.test($('#paneA').textContent));
+  check('positioned layout is the default view', !!$('#layoutSheet') && /متن صفحه 1/.test($('#paneA').textContent));
+  click($('#layoutToggle'));
+  check('continuous text can be selected', !$('#layoutSheet') && /متن صفحه 1/.test($('#paneA').textContent));
+  click($('#layoutToggle'));
+  check('layout view can be restored', !!$('#layoutSheet'));
   check('notes (reading_conflict) are shown', /reading_conflict/.test($('#paneA').textContent));
-  check('strip has chips', $$('#strip .chip').length === 5);
+  check('strip has chips', $$('#strip .chip').length === 6);
 
   click($$('#queue .item')[1]);
   check('server error is shown with its message', shown('err') === 'flex' && /PDF معتبر نیست/.test($('#errT').textContent) && /bad\.pdf/.test($('#errT').textContent));
@@ -87,8 +91,8 @@ const file = name => new w.File(['x'], name);
   click($('#rot0'));
   check('reset rotation', rotation() === 0);
 
-  click($('#dlTxt')); click($('#dlJson'));
-  check('downloads are named after the input', downloads.join('|') === 'multi doc.txt|multi doc.json', downloads.join('|'));
+  click($('#dlTxt')); click($('#dlJson')); click($('#dlLayout'));
+  check('downloads are named after the input', downloads.join('|') === 'multi doc.txt|multi doc.json|multi doc_layout_p1.html', downloads.join('|'));
 
   $('#focusBtn').click();
   check('focus mode toggles', d.body.classList.contains('focus'));
@@ -105,7 +109,7 @@ const file = name => new w.File(['x'], name);
   $('#lex').checked = true; $('#lex').dispatchEvent(new w.Event('change', { bubbles: true })); $('#tbl').checked = false; $('#maxp').value = '3';
   w.addFiles([file('ok.png')]);
   await sleep(80);
-  check('options are sent', calls[calls.length - 1].url === '/app/run?lexicon=true&tables=false&max_pages=3');
+  check('options are sent', calls[calls.length - 1].url === '/app/run?lexicon=true&tables=false&max_pages=3&preprocess=original');
   check('options are remembered', JSON.parse(w.localStorage.getItem('ocrapp-view')).lex === true);
 
   check('no script errors', errors.length === 0, errors.join(' | '));

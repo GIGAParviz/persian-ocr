@@ -83,6 +83,7 @@ class PageResult(BaseModel):
 class OcrResponse(BaseModel):
     file: str
     time_sec: float
+    preprocess: str = "original"
     pages: list[PageResult]
 
 
@@ -94,5 +95,6 @@ class TextPage(BaseModel):
 class OcrTextResponse(BaseModel):
     file: str
     time_sec: float
+    preprocess: str = "original"
     text: str
     pages: list[TextPage]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,6 +27,14 @@ def setup_environment() -> None:
     os.environ["INDRA_OCR_MODEL_DIR"] = str(MODEL_DIR)
 
 
+class PreprocessMode(str, Enum):
+    original = "original"
+    sharpen = "sharpen"
+    sharpen_light = "sharpen_light"
+    connect = "connect"
+    soft_light = "soft_light"
+
+
 @dataclass(frozen=True)
 class PipelineConfig:
     dpi: float = 300.0
@@ -36,6 +45,7 @@ class PipelineConfig:
     header_fraction: float = 0.30
     low_conf: float = 0.75
     use_lexicon: bool = True
+    preprocess: PreprocessMode = PreprocessMode.original
     max_pages: int = 0
 
     @classmethod

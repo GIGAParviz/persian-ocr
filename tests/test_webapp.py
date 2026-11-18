@@ -147,9 +147,9 @@ class Export(unittest.TestCase):
     def setUpClass(cls):
         cls.client = TestClient(create_app(preload=False))
 
-    def test_exports_all_pages_as_valid_docx_with_persian_filename(self):
-        pages = [{"page": i + 1, "text": f"ویرایش صفحه {i + 1}"} for i in range(5)]
-        res = self.client.post("/app/export", json={"name": "گزارش.v2", "pages": pages})
+    def test_exports_all_pages_as_valid_docx_and_pdf_with_persian_filename(self):
+        pages = [{"page": i + 1, "text": f"ویرایش صفحه {i + 1}", "layout": {"size": [800, 1000], "cells": [], "tables": [], "items": [{"box": [100, 50, 700, 90], "text": f"ویرایش صفحه {i + 1}", "conf": 0.9, "source": "line"}]}} for i in range(5)]
+        res = self.client.post("/app/export?format=docx", json={"name": "گزارش.v2", "pages": pages})
         self.assertEqual(res.status_code, 200)
         self.assertIn("wordprocessingml", res.headers["content-type"])
         encoded = res.headers["content-disposition"].split("filename*=UTF-8''")[1]
@@ -158,6 +158,13 @@ class Export(unittest.TestCase):
             text = "".join(ET.fromstring(zf.read("word/document.xml")).itertext())
         self.assertIn("ویرایش صفحه 1", text)
         self.assertIn("ویرایش صفحه 5", text)
+
+        pdf_res = self.client.post("/app/export?format=pdf", json={"name": "گزارش.v2", "pages": pages})
+        self.assertEqual(pdf_res.status_code, 200)
+        self.assertEqual(pdf_res.headers["content-type"], "application/pdf")
+        self.assertTrue(pdf_res.content.startswith(b"%PDF-"))
+        pdf_enc = pdf_res.headers["content-disposition"].split("filename*=UTF-8''")[1]
+        self.assertEqual(unquote(pdf_enc), "گزارش.v2.pdf")
 
     def test_empty_pages_rejected_and_key_enforced(self):
         self.assertEqual(self.client.post("/app/export", json={"name": "x", "pages": []}).status_code, 422)

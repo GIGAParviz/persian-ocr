@@ -1,4 +1,5 @@
 import base64
+from enum import Enum
 from pathlib import Path
 
 import cv2
@@ -9,7 +10,7 @@ from pydantic import BaseModel, Field
 from evaluation.dashboard import build_doc
 
 from ...config import PreprocessMode
-from ...report import DOCX_MIME, build_docx
+from ...report import DOCX_MIME, PDF_MIME, build_docx, build_pdf
 from ...report.files import render_json, render_text
 from ..deps import require_api_key
 from ..downloads import clean_stem, content_disposition, output_stem
@@ -63,9 +64,15 @@ def run(
     return {"doc": doc, "txt": render_text(result), "json": render_json(result)}
 
 
+class ExportFormat(str, Enum):
+    docx = "docx"
+    pdf = "pdf"
+
+
 class ExportPage(BaseModel):
     page: int = Field(1, ge=1)
     text: str = ""
+    layout: dict | None = None
 
 
 class ExportRequest(BaseModel):
@@ -74,7 +81,9 @@ class ExportRequest(BaseModel):
 
 
 @router.post("/export", dependencies=[Depends(require_api_key)])
-def export_docx(body: ExportRequest) -> Response:
-    stem = clean_stem(f"{body.name}.docx")
-    data = build_docx([{"page": p.page, "text": p.text} for p in body.pages])
-    return Response(content=data, media_type=DOCX_MIME, headers={"Content-Disposition": content_disposition(f"{stem}.docx")})
+def export_document(body: ExportRequest, format: ExportFormat = Query(ExportFormat.docx)) -> Response:
+    stem = clean_stem(f"{body.name}.{format.value}")
+    pages = [p.model_dump() for p in body.pages]
+    if format is ExportFormat.pdf:
+        return Response(content=build_pdf(pages), media_type=PDF_MIME, headers={"Content-Disposition": content_disposition(f"{stem}.pdf")})
+    return Response(content=build_docx(pages), media_type=DOCX_MIME, headers={"Content-Disposition": content_disposition(f"{stem}.docx")})

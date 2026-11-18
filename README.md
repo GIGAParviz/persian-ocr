@@ -71,7 +71,7 @@ The default result view places recognized lines and table cells at their detecte
 
 Select an image preprocessing mode before adding files. The selection is saved with each queued file. `original` remains the default because the experimental modes have regressed verified financial amounts. The [preprocessing guide](docs/preprocessing-web-ui.md) records those controls.
 
-The Web UI also lets you edit extracted text (either inline in the positioned layout or per page in the `ویرایش متن` editor) and export **all pages**—including your edits—as TXT, JSON, Word (`.docx`), or print/save-as-PDF (`.pdf`). Its JSON includes page geometry under `layout`; the standard `/ocr` response does not include Web UI layout data.
+The Web UI also lets you edit extracted text (either inline in the positioned layout or per page in the `ویرایش متن` editor) and export **all pages**—including your edits—as TXT, JSON, structured Word (`.docx`), or structured PDF (`.pdf`) directly from the server, preserving the 2D table and column layout. Its JSON includes page geometry under `layout`; the standard `/ocr` response does not include Web UI layout data.
 
 ## HTTP API
 

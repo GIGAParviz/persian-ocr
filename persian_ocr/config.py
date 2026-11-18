@@ -15,6 +15,7 @@ OUTPUT_DIR = ROOT / "output"
 REPORTS_DIR = ROOT / "reports"
 EVAL_DATA_DIR = ROOT / "eval_data"
 LEXICON_PATH = PACKAGE_DIR / "data" / "domain_lexicon.json"
+FONT_PATH = PACKAGE_DIR / "data" / "Vazirmatn-Regular.ttf"
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
 

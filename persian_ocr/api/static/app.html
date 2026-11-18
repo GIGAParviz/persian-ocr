@@ -94,20 +94,6 @@ code{direction:ltr;unicode-bidi:embed;background:rgba(127,127,127,.15);padding:0
 .editwrap{display:flex;flex-direction:column;height:100%;gap:8px}
 .editbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--mut)}
 .editor{width:100%;flex:1;min-height:58vh;resize:none;border:1px solid var(--bd2);border-radius:8px;padding:12px 14px;font-family:var(--fa);font-size:var(--fs,16px);line-height:1.9;background:var(--panel);color:var(--text);direction:rtl}
-#printAll{display:none}
-@page{size:A4;margin:16mm}
-@media print{
-  html,body{height:auto!important;overflow:visible!important;background:#fff;color:#111;display:block!important}
-  body>:not(#printAll){display:none!important}
-  #printAll{display:block!important;font-family:var(--fa);font-size:11.5pt;line-height:1.85;color:#111;direction:rtl}
-  .print-page{page-break-after:always;break-after:page}
-  .print-page:last-child{page-break-after:auto;break-after:auto}
-  .print-head{font-size:9pt;color:#666;border-bottom:1px solid #ddd;padding-bottom:4px;margin-bottom:10px}
-  .print-page .l{margin:0 0 4px}
-  .print-page .sup{margin:10px 0 4px;padding-top:6px;border-top:1px dashed #bbb;color:#555;font-size:9.5pt}
-  .print-page table.t{width:100%;border-collapse:collapse;margin:8px 0;font-size:10pt}
-  .print-page td{border:1px solid #999;padding:4px 7px;text-align:right;vertical-align:top}
-}
 #layoutZoomWrap{display:none;align-items:center;gap:5px}
 #layoutZoom{width:90px}
 body.noimg #imgcol{display:none}
@@ -168,8 +154,8 @@ body.focus header,body.focus .strip,body.focus #queue{display:none}
     <button class="btn" id="copyBtn">کپی متن صفحه</button>
     <button class="btn" id="dlTxt" title="دانلود متن تمام صفحه‌ها">دانلود txt</button>
     <button class="btn" id="dlJson" title="دانلود JSON تمام صفحه‌ها">دانلود json</button>
-    <button class="btn" id="dlDocx" title="دانلود تمام صفحه‌ها با فرمت Word (.docx)">دانلود Word</button>
-    <button class="btn" id="dlPdf" title="چاپ یا ذخیره تمام صفحه‌ها به صورت PDF (گزینه Save as PDF)">ذخیره PDF</button>
+    <button class="btn" id="dlDocx" title="دانلود تمام صفحه‌ها با فرمت Word (.docx) و حفظ ساختار">دانلود Word</button>
+    <button class="btn" id="dlPdf" title="دانلود تمام صفحه‌ها با فرمت PDF و حفظ ساختار چیدمان">دانلود PDF</button>
     <button class="btn" id="dlLayout">چیدمان صفحه HTML</button>
     <button class="btn" id="focusBtn" title="مخفی کردن همه جز تصویر و متن (F)">حالت تمرکز</button>
    </div>
@@ -181,7 +167,6 @@ body.focus header,body.focus .strip,body.focus #queue{display:none}
   </div>
  </section>
 </main>
-<div id="printAll"></div>
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -222,7 +207,7 @@ async function pump(){
     const r=await fetch('/app/run?'+q,{method:'POST',body:fd,headers:key?{'X-API-Key':key}:{}});
     const j=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(detailOf(j,r.status));
-    j.doc.pages.forEach(p=>{if(p.plain_text==null)p.plain_text='';p.orig_plain_text=p.plain_text;p.edited=false});
+    j.doc.pages.forEach(p=>{if(p.plain_text==null)p.plain_text='';p.orig_plain_text=p.plain_text;p.orig_layout=p.layout?JSON.parse(JSON.stringify(p.layout)):null;p.edited=false;p.text_edited=false});
     Object.assign(it,{doc:j.doc,txt:j.txt,json:j.json,rot:{},status:'done',sec:(Date.now()-it.t0)/1000});
     const now=Q[cur];
     if(!now||now===it||now.status==='wait'||now.status==='run'){cur=Q.indexOf(it);S.page=it.doc.focus||0}
@@ -419,11 +404,12 @@ function renderViewer(){
     $('#pageEditor').oninput=e=>{
       p.plain_text=e.target.value;
       p.edited=p.plain_text!==p.orig_plain_text;
+      p.text_edited=p.edited;
       $('#editStat').textContent=p.edited?'ویرایش‌شده':'بدون تغییر';
       $('#resetEdit').disabled=!p.edited;
       updateStrip();
     };
-    $('#resetEdit').onclick=()=>{p.plain_text=p.orig_plain_text;p.edited=false;renderViewer()};
+    $('#resetEdit').onclick=()=>{p.plain_text=p.orig_plain_text;if(p.orig_layout)p.layout=JSON.parse(JSON.stringify(p.orig_layout));p.edited=false;p.text_edited=false;renderViewer()};
   }else if(layoutActive){
     $('#paneA').innerHTML=layoutMarkup(p.layout)+more;
     fitLayout();
@@ -463,37 +449,51 @@ function download(ext){
   const content=ext==='txt'?buildAllTxt(it.doc):buildAllJson(it);
   triggerDownload(new Blob([content],{type}),it.doc.name+'.'+ext);
 }
-async function downloadWord(){
+function syncedLayout(p){
+  if(!p.layout)return null;
+  if(!p.text_edited)return p.layout;
+  const oldLines=(p.orig_plain_text||'').split('\n'),newLines=(p.plain_text||'').split('\n');
+  if(oldLines.length!==newLines.length)return null;
+  const cloned={...p.layout,items:p.layout.items.map(it=>({...it}))};
+  const replaceOnce=(from,to)=>{
+    if(!from||from===to)return;
+    const hit=cloned.items.filter(it=>it.text===from);
+    if(hit.length===1)hit[0].text=to;
+  };
+  for(let i=0;i<oldLines.length;i++){
+    const a=oldLines[i].trim(),b=newLines[i].trim();
+    if(a===b)continue;
+    if(a.startsWith('|')&&a.endsWith('|')&&b.startsWith('|')&&b.endsWith('|')){
+      const ca=a.slice(1,-1).split('|').map(s=>s.trim()),cb=b.slice(1,-1).split('|').map(s=>s.trim());
+      if(ca.length===cb.length)ca.forEach((v,j)=>replaceOnce(v,cb[j]));
+    }else{
+      replaceOnce(a,b);
+    }
+  }
+  return cloned;
+}
+async function exportFile(fmt,btnSel,busyLabel){
   const it=item();if(!it||!it.doc)return;
-  const btn=$('#dlDocx'),orig=btn.textContent;
-  btn.disabled=true;btn.textContent='در حال ساخت Word…';
+  const btn=$(btnSel),orig=btn.textContent;
+  btn.disabled=true;btn.textContent=busyLabel;
   try{
     const key=$('#key').value.trim();
-    const r=await fetch('/app/export',{
+    const r=await fetch('/app/export?format='+fmt,{
       method:'POST',
       headers:{'Content-Type':'application/json',...(key?{'X-API-Key':key}:{})},
-      body:JSON.stringify({name:it.doc.name,pages:it.doc.pages.map(p=>({page:p.page,text:p.plain_text||''}))}),
+      body:JSON.stringify({name:it.doc.name,pages:it.doc.pages.map(p=>({page:p.page,text:p.plain_text||'',layout:syncedLayout(p)}))}),
     });
     if(!r.ok){
       const j=await r.json().catch(()=>({}));
       throw new Error(detailOf(j,r.status));
     }
     const blob=await r.blob();
-    triggerDownload(blob,it.doc.name+'.docx');
+    triggerDownload(blob,it.doc.name+'.'+fmt);
   }catch(e){
-    alert('ساخت فایل Word ناموفق بود: '+e.message);
+    alert('ساخت فایل '+fmt.toUpperCase()+' ناموفق بود: '+e.message);
   }finally{
     btn.disabled=false;btn.textContent=orig;
   }
-}
-function printPdf(){
-  const it=item();if(!it||!it.doc)return;
-  const d=it.doc,prevTitle=document.title;
-  $('#printAll').innerHTML=d.pages.map(p=>'<section class="print-page"><div class="print-head">'+esc(d.name)+' — صفحه '+p.page+' از '+d.pages.length+'</div>'+(renderPlainHtml(p.plain_text)||'<p></p>')+'</section>').join('');
-  document.title=d.name;
-  const cleanup=()=>{document.title=prevTitle;$('#printAll').innerHTML=''};
-  window.addEventListener('afterprint',cleanup,{once:true});
-  window.print();
 }
 
 $('#pick').onclick=$('#pick2').onclick=()=>$('#file').click();
@@ -514,7 +514,7 @@ $('#sourceView').onclick=()=>{S.processed=!S.processed;renderViewer()};
 $('#fsM').onclick=()=>setFs(-1);$('#fsP').onclick=()=>setFs(1);
 $('#focusBtn').onclick=()=>{S.focus=!S.focus;applyView()};
 $('#zoom').oninput=e=>{S.zoom=+e.target.value;layoutImage()};
-$('#dlTxt').onclick=()=>download('txt');$('#dlJson').onclick=()=>download('json');$('#dlDocx').onclick=downloadWord;$('#dlPdf').onclick=printPdf;$('#dlLayout').onclick=downloadLayout;
+$('#dlTxt').onclick=()=>download('txt');$('#dlJson').onclick=()=>download('json');$('#dlDocx').onclick=()=>exportFile('docx','#dlDocx','در حال ساخت Word…');$('#dlPdf').onclick=()=>exportFile('pdf','#dlPdf','در حال ساخت PDF…');$('#dlLayout').onclick=downloadLayout;
 $('#layoutToggle').onclick=()=>{S.layout=!S.layout;saveView();renderViewer()};
 $('#editBtn').onclick=()=>{S.edit=!S.edit;renderViewer()};
 $('#layoutZoom').oninput=e=>{S.layoutZoom=+e.target.value;resizeLayout()};

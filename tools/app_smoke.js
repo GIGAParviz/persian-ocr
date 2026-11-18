@@ -3,7 +3,7 @@ const path = require('path');
 const { JSDOM } = require(path.join(__dirname, '..', '.cache', 'nodetools', 'node_modules', 'jsdom'));
 const html = fs.readFileSync(path.join(__dirname, '..', 'persian_ocr', 'api', 'static', 'app.html'), 'utf8');
 
-const errors = [], calls = [], exportCalls = [], alerts = [], downloads = [], blobs = [], prints = [];
+const errors = [], calls = [], exportCalls = [], alerts = [], downloads = [], blobs = [];
 let active = 0, maxActive = 0;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PX = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
@@ -12,10 +12,10 @@ const doc = (name, pages) => ({ name, file: name + '.png', time: 1.5, mismatch: 
 
 const fakeFetch = async (url, opts = {}) => {
   if (url === '/health') return { ok: true, status: 200, json: async () => ({ model_loaded: false, auth_required: true }) };
-  if (url === '/app/export') {
+  if (url.startsWith('/app/export')) {
     const body = JSON.parse(opts.body);
-    exportCalls.push({ body, key: (opts.headers || {})['X-API-Key'] });
-    return { ok: true, status: 200, blob: async () => new w.Blob(['PKdocx'], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }) };
+    exportCalls.push({ url, body, key: (opts.headers || {})['X-API-Key'] });
+    return { ok: true, status: 200, blob: async () => new w.Blob(['BIN'], { type: 'application/octet-stream' }) };
   }
   const name = opts.body.get('file').name;
   calls.push({ url, name, key: (opts.headers || {})['X-API-Key'] });
@@ -38,10 +38,6 @@ const dom = new JSDOM(html, {
     w.URL.createObjectURL = b => { blobs.push(b); return 'blob:' + blobs.length; };
     w.URL.revokeObjectURL = () => {};
     w.HTMLAnchorElement.prototype.click = function () { downloads.push(this.download); };
-    w.print = () => {
-      prints.push({ title: w.document.title, pages: w.document.querySelectorAll('#printAll .print-page').length, html: w.document.querySelector('#printAll').innerHTML });
-      w.dispatchEvent(new w.Event('afterprint'));
-    };
   },
 });
 const w = dom.window, d = w.document;
@@ -131,11 +127,12 @@ const file = name => new w.File(['x'], name);
 
   click($('#dlDocx'));
   await sleep(30);
-  check('word export sends all pages with edits and key', exportCalls.length === 1 && exportCalls[0].key === 'k1' && exportCalls[0].body.pages.length === 3 && exportCalls[0].body.pages[0].text === 'اصلاح نهایی صفحه اول');
+  check('word export sends all pages with synced layout edits and key', exportCalls.length === 1 && exportCalls[0].url === '/app/export?format=docx' && exportCalls[0].key === 'k1' && exportCalls[0].body.pages.length === 3 && exportCalls[0].body.pages[0].text === 'اصلاح نهایی صفحه اول' && exportCalls[0].body.pages[0].layout.items[0].text === 'اصلاح نهایی صفحه اول');
   check('word download uses document stem', downloads[downloads.length - 1] === 'multi doc.docx');
 
   click($('#dlPdf'));
-  check('pdf print renders all 3 pages with edits and cleans up', prints.length === 1 && prints[0].pages === 3 && prints[0].title === 'multi doc' && /اصلاح نهایی صفحه اول/.test(prints[0].html) && $('#printAll').innerHTML === '');
+  await sleep(30);
+  check('pdf export sends all pages with layout and downloads .pdf', exportCalls.length === 2 && exportCalls[1].url === '/app/export?format=pdf' && exportCalls[1].body.pages.length === 3 && downloads[downloads.length - 1] === 'multi doc.pdf');
 
   $('#focusBtn').click();
   check('focus mode toggles', d.body.classList.contains('focus'));

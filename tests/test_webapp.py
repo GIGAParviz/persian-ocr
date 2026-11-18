@@ -1,9 +1,13 @@
+import io
 import json
 import os
 import unittest
+import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.parse import unquote
 
 import numpy as np
 from fastapi import HTTPException
@@ -51,6 +55,9 @@ class Page(unittest.TestCase):
         self.assertIn("/app/run", res.text)
         self.assertIn('id="prep"', res.text)
         self.assertIn('id="sourceView"', res.text)
+        self.assertIn('id="editBtn"', res.text)
+        self.assertIn('id="dlDocx"', res.text)
+        self.assertIn('id="dlPdf"', res.text)
         self.assertNotIn("http://", res.text)
         self.assertNotIn("https://", res.text)
 
@@ -133,6 +140,31 @@ class Run(unittest.TestCase):
             self.assertEqual(self.post().status_code, 401)
             res = self.client.post("/app/run", files={"file": ("a.png", SAMPLE.read_bytes())}, headers={"X-API-Key": "s3cret"})
             self.assertEqual(res.status_code, 200)
+
+
+class Export(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.client = TestClient(create_app(preload=False))
+
+    def test_exports_all_pages_as_valid_docx_with_persian_filename(self):
+        pages = [{"page": i + 1, "text": f"ویرایش صفحه {i + 1}"} for i in range(5)]
+        res = self.client.post("/app/export", json={"name": "گزارش.v2", "pages": pages})
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("wordprocessingml", res.headers["content-type"])
+        encoded = res.headers["content-disposition"].split("filename*=UTF-8''")[1]
+        self.assertEqual(unquote(encoded), "گزارش.v2.docx")
+        with zipfile.ZipFile(io.BytesIO(res.content)) as zf:
+            text = "".join(ET.fromstring(zf.read("word/document.xml")).itertext())
+        self.assertIn("ویرایش صفحه 1", text)
+        self.assertIn("ویرایش صفحه 5", text)
+
+    def test_empty_pages_rejected_and_key_enforced(self):
+        self.assertEqual(self.client.post("/app/export", json={"name": "x", "pages": []}).status_code, 422)
+        with patch.dict(os.environ, {API_KEY_ENV: "s3cret"}):
+            payload = {"name": "x", "pages": [{"page": 1, "text": "سلام"}]}
+            self.assertEqual(self.client.post("/app/export", json=payload).status_code, 401)
+            self.assertEqual(self.client.post("/app/export", json=payload, headers={"X-API-Key": "s3cret"}).status_code, 200)
 
 
 if __name__ == "__main__":

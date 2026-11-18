@@ -212,7 +212,7 @@ class DownloadEndToEnd(ApiCase):
         return self.client.post(f"/ocr/download?format={fmt}&lexicon=false", files={"file": (filename, SAMPLE.read_bytes())})
 
     def test_each_format_is_named_after_the_input(self):
-        for fmt in ("txt", "json", "html"):
+        for fmt in ("txt", "json", "html", "docx"):
             res = self.download("scan 7.PNG", fmt)
             self.assertEqual(res.status_code, 200, res.text[:200])
             self.assertIn(f'filename="scan 7.{fmt}"', res.headers["content-disposition"])

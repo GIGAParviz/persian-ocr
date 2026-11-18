@@ -3,7 +3,7 @@ const path = require('path');
 const { JSDOM } = require(path.join(__dirname, '..', '.cache', 'nodetools', 'node_modules', 'jsdom'));
 const html = fs.readFileSync(path.join(__dirname, '..', 'persian_ocr', 'api', 'static', 'app.html'), 'utf8');
 
-const errors = [], calls = [], alerts = [], downloads = [];
+const errors = [], calls = [], exportCalls = [], alerts = [], downloads = [], blobs = [], prints = [];
 let active = 0, maxActive = 0;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PX = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
@@ -12,6 +12,11 @@ const doc = (name, pages) => ({ name, file: name + '.png', time: 1.5, mismatch: 
 
 const fakeFetch = async (url, opts = {}) => {
   if (url === '/health') return { ok: true, status: 200, json: async () => ({ model_loaded: false, auth_required: true }) };
+  if (url === '/app/export') {
+    const body = JSON.parse(opts.body);
+    exportCalls.push({ body, key: (opts.headers || {})['X-API-Key'] });
+    return { ok: true, status: 200, blob: async () => new w.Blob(['PKdocx'], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }) };
+  }
   const name = opts.body.get('file').name;
   calls.push({ url, name, key: (opts.headers || {})['X-API-Key'] });
   active++; maxActive = Math.max(maxActive, active);
@@ -19,7 +24,9 @@ const fakeFetch = async (url, opts = {}) => {
   active--;
   if (name.startsWith('bad')) return { ok: false, status: 422, json: async () => ({ detail: 'فایل PDF معتبر نیست.' }) };
   if (name.startsWith('down')) throw new TypeError('Failed to fetch');
-  return { ok: true, status: 200, json: async () => ({ doc: doc(name.replace(/\.[^.]+$/, ''), name.startsWith('multi') ? 3 : 1), txt: 'TXT:' + name, json: '{"f":"' + name + '"}' }) };
+  const pages = name.startsWith('multi') ? 3 : 1;
+  const rawJson = JSON.stringify({ file: name, pages: Array.from({ length: pages }, (_, i) => ({ page: i + 1, text_dedup: `متن صفحه ${i + 1}` })) });
+  return { ok: true, status: 200, json: async () => ({ doc: doc(name.replace(/\.[^.]+$/, ''), pages), txt: 'TXT:' + name, json: rawJson }) };
 };
 
 const dom = new JSDOM(html, {
@@ -28,9 +35,13 @@ const dom = new JSDOM(html, {
     w.addEventListener('error', e => errors.push('window error: ' + e.message));
     w.fetch = fakeFetch;
     w.alert = m => alerts.push(m);
-    w.URL.createObjectURL = () => 'blob:x';
+    w.URL.createObjectURL = b => { blobs.push(b); return 'blob:' + blobs.length; };
     w.URL.revokeObjectURL = () => {};
     w.HTMLAnchorElement.prototype.click = function () { downloads.push(this.download); };
+    w.print = () => {
+      prints.push({ title: w.document.title, pages: w.document.querySelectorAll('#printAll .print-page').length, html: w.document.querySelector('#printAll').innerHTML });
+      w.dispatchEvent(new w.Event('afterprint'));
+    };
   },
 });
 const w = dom.window, d = w.document;
@@ -93,6 +104,38 @@ const file = name => new w.File(['x'], name);
 
   click($('#dlTxt')); click($('#dlJson')); click($('#dlLayout'));
   check('downloads are named after the input', downloads.join('|') === 'multi doc.txt|multi doc.json|multi doc_layout_p1.html', downloads.join('|'));
+
+  // Inline layout edit syncs to plain_text
+  const boxEl = $('#layoutSheet .layout-item');
+  boxEl.textContent = 'متن اصلاح‌شده ۱';
+  boxEl.dispatchEvent(new w.Event('blur'));
+  check('inline layout edit marks page edited', Q()[0].doc.pages[0].plain_text === 'متن اصلاح‌شده ۱' && Q()[0].doc.pages[0].edited === true);
+
+  // Full text editor mode + reset + edit page 2
+  click($('#editBtn'));
+  check('edit mode opens textarea with current text', !!$('#pageEditor') && $('#pageEditor').value === 'متن اصلاح‌شده ۱');
+  click($('#resetEdit'));
+  check('reset edit restores original text', $('#pageEditor').value === 'متن صفحه 1' && Q()[0].doc.pages[0].edited === false);
+  $('#pageEditor').value = 'اصلاح نهایی صفحه اول';
+  $('#pageEditor').dispatchEvent(new w.Event('input', { bubbles: true }));
+  check('editor input updates plain_text and strip', Q()[0].doc.pages[0].plain_text === 'اصلاح نهایی صفحه اول' && /ویرایش‌شده/.test($('#strip').textContent));
+  click($('#editBtn'));
+  check('leaving edit mode returns to viewer', !$('#pageEditor'));
+
+  // Downloads carry edited text across all 3 pages
+  click($('#dlTxt')); click($('#dlJson'));
+  const txtOut = await blobs[blobs.length - 2].text();
+  const jsonOut = JSON.parse(await blobs[blobs.length - 1].text());
+  check('txt export includes edited text and all pages', /اصلاح نهایی صفحه اول/.test(txtOut) && /متن صفحه 3/.test(txtOut));
+  check('json export includes edited text', jsonOut.pages[0].text_dedup === 'اصلاح نهایی صفحه اول' && jsonOut.pages[0].edited === true);
+
+  click($('#dlDocx'));
+  await sleep(30);
+  check('word export sends all pages with edits and key', exportCalls.length === 1 && exportCalls[0].key === 'k1' && exportCalls[0].body.pages.length === 3 && exportCalls[0].body.pages[0].text === 'اصلاح نهایی صفحه اول');
+  check('word download uses document stem', downloads[downloads.length - 1] === 'multi doc.docx');
+
+  click($('#dlPdf'));
+  check('pdf print renders all 3 pages with edits and cleans up', prints.length === 1 && prints[0].pages === 3 && prints[0].title === 'multi doc' && /اصلاح نهایی صفحه اول/.test(prints[0].html) && $('#printAll').innerHTML === '');
 
   $('#focusBtn').click();
   check('focus mode toggles', d.body.classList.contains('focus'));

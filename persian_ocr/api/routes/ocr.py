@@ -23,6 +23,7 @@ class DownloadFormat(str, Enum):
     txt = "txt"
     json = "json"
     html = "html"
+    docx = "docx"
     zip = "zip"
 
 
@@ -94,10 +95,10 @@ def ocr_review(
     response_class=Response,
     summary="OCR و دانلود خروجی با نام همان فایل ورودی",
     description=(
-        "نام فایل خروجی همان نام فایل ورودی است با پسوند خروجی: `18185.pdf` ← `18185.txt` یا `18185.json` یا `18185.html`. "
-        "با `zip` هر سه فایل با همان نام در `18185.zip` می‌آیند. نام فارسی هم درست دانلود می‌شود (RFC 5987)."
+        "نام فایل خروجی همان نام فایل ورودی است با پسوند خروجی: `18185.pdf` ← `18185.txt` یا `18185.json` یا `18185.html` یا `18185.docx`. "
+        "با `zip` فایل‌های txt/json/html در `18185.zip` می‌آیند. نام فارسی هم درست دانلود می‌شود (RFC 5987)."
     ),
-    responses={200: {"description": "فایل دانلودی", "content": {"text/plain": {}, "application/json": {}, "text/html": {}, "application/zip": {}}}},
+    responses={200: {"description": "فایل دانلودی", "content": {"text/plain": {}, "application/json": {}, "text/html": {}, "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {}, "application/zip": {}}}},
 )
 def ocr_download(
     file: UploadFile = File(..., description="PDF یا تصویر"),

@@ -71,7 +71,7 @@ The default result view places recognized lines and table cells at their detecte
 
 Select an image preprocessing mode before adding files. The selection is saved with each queued file. `original` remains the default because the experimental modes have regressed verified financial amounts. The [preprocessing guide](docs/preprocessing-web-ui.md) records those controls.
 
-The Web UI also offers TXT and JSON downloads. Its JSON includes page geometry under `layout`; the standard `/ocr` response does not include Web UI layout data.
+The Web UI also lets you edit extracted text (either inline in the positioned layout or per page in the `ویرایش متن` editor) and export **all pages**—including your edits—as TXT, JSON, Word (`.docx`), or print/save-as-PDF (`.pdf`). Its JSON includes page geometry under `layout`; the standard `/ocr` response does not include Web UI layout data.
 
 ## HTTP API
 
@@ -82,7 +82,7 @@ The server exposes Swagger UI at `/docs` and these main endpoints:
 | `POST /ocr` | Full page text, corrections, review items, tables, and invoice fields |
 | `POST /ocr/text` | Final text for each page |
 | `POST /ocr/review` | Human-review HTML |
-| `POST /ocr/download?format=txt\|json\|html\|zip` | Named output files |
+| `POST /ocr/download?format=txt\|json\|html\|docx\|zip` | Named output files |
 | `POST /validate/national-id`, `/validate/legal-id`, `/validate/iban`, `/validate/postal-code` | Deterministic validation and conservative correction |
 | `POST /text/postprocess`, `/text/normalize` | Text-processing rules |
 | `POST /invoice/verify-item` | Invoice-row equation checks |

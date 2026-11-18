@@ -6,15 +6,19 @@ from urllib.parse import quote
 
 from fastapi import UploadFile
 
-from ..report import MEDIA_TYPES, render_bundle
+from ..report import MEDIA_TYPES, build_docx, render_bundle
 
 MAX_STEM = 150
 UNSAFE = re.compile(r'[\x00-\x1f"\\/:*?<>|]')
 
 
-def output_stem(file: UploadFile) -> str:
-    stem = UNSAFE.sub("_", Path(file.filename or "").stem).strip(" .")[:MAX_STEM]
+def clean_stem(filename: str | None) -> str:
+    stem = UNSAFE.sub("_", Path(filename or "").stem).strip(" .")[:MAX_STEM]
     return stem or "document"
+
+
+def output_stem(file: UploadFile) -> str:
+    return clean_stem(file.filename)
 
 
 def content_disposition(filename: str, disposition: str = "attachment") -> str:
@@ -31,6 +35,8 @@ def zip_bundle(files: dict[str, tuple[str, bytes]]) -> bytes:
 
 
 def build_download(result: dict, source: Path, stem: str, fmt: str) -> tuple[str, str, bytes]:
+    if fmt == "docx":
+        return f"{stem}.docx", MEDIA_TYPES["docx"], build_docx(result["pages"])
     files = render_bundle(result, source, stem, html=fmt in ("html", "zip"))
     if fmt == "zip":
         return f"{stem}.zip", MEDIA_TYPES["zip"], zip_bundle(files)

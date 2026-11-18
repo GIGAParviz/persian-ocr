@@ -279,8 +279,11 @@
 - `page_notes(p)` (عمومی؛ داشبورد هم از آن استفاده می‌کند): سه کادر: اصلاح‌های خودکار (سبز)، نیازمند مرور (نارنجی)، خطوط کم‌اطمینان (قرمز).
 - `build_review_html(result, source)`: صفحه کامل: تصویر هر صفحه (base64) کنار یادداشت‌ها، فاکتور و متن کامل (جمع‌شونده).
 
+### `docx.py`
+- `DOCX_MIME` و `build_docx(pages)`: بدون وابستگی خارجی (فقط `zipfile` و XML استاندارد) یک فایل `.docx` معتبر می‌سازد. پاراگراف‌ها و بخش صفحه را راست‌به‌چپ (`w:bidi`) و با تفکیک متن فارسی (`w:rtl`) از ارقام می‌نویسد، جدول‌های markdown را به جدول راست‌به‌چپ Word (`w:tbl` + `w:bidiVisual`) تبدیل می‌کند، نویسه‌های غیرمجاز XML را حذف می‌کند و در فایل‌های چندصفحه‌ای بین صفحه‌ها `w:pageBreakBefore` می‌گذارد.
+
 ### `files.py`
-- `MEDIA_TYPES`: نوع محتوای هر قالب (txt، json، html، zip).
+- `MEDIA_TYPES`: نوع محتوای هر قالب (txt، json، html، docx، zip).
 - `render_text(result)`: `text_dedup` هر صفحه (متن کامل و مرتب) با سرتیتر `=== صفحه N ===`. `render_json(result)`: JSON فارسی (بدون escape).
 - `render_bundle(result, source, stem, html=True)`: فایل‌ها را در حافظه می‌سازد: `{قالب: (نام، بایت‌ها)}` با نام `<stem>.txt|json|html`. هم CLI و هم API از همین استفاده می‌کنند تا نام‌ها هیچ‌وقت ناهماهنگ نشوند.
 - `write_outputs(result, source, out_dir, html=True)`: پوشه را می‌سازد و خروجی `render_bundle` را با `stem` فایل ورودی روی دیسک می‌نویسد؛ مسیرها را برمی‌گرداند. فایل HTML دیگر `_review` ندارد.
@@ -304,12 +307,12 @@
 | `GET /health` | وضعیت، نسخه، بارگذاری مدل، فعال بودن کلید |
 | `POST /ocr` | OCR کامل یک PDF/تصویر (متن، جدول، فاکتور، اصلاح‌ها، صف مرور) |
 | `POST /ocr/text` | فقط متن |
-| `POST /ocr/download?format=txt\|json\|html\|zip` | دانلود با همان نام فایل ورودی (`18185.pdf` ← `18185.txt`) |
+| `POST /ocr/download?format=txt\|json\|html\|docx\|zip` | دانلود با همان نام فایل ورودی (`18185.pdf` ← `18185.txt` یا `.docx`) |
 | `POST /ocr/review` | گزارش HTML مرور انسانی |
 | `POST /validate/national-id`، `/legal-id`، `/iban`، `/postal-code` | checksum و اصلاح محافظه‌کارانه |
 | `POST /text/postprocess`، `/text/normalize` | قواعد متنی بدون OCR |
 | `POST /invoice/verify-item` | معادلات یک ردیف فاکتور |
-| `GET /app`، `POST /app/run` | وب‌اپ آزمون دستی با تصویر خودت (در Swagger نیست) |
+| `GET /app`، `POST /app/run`، `POST /app/export` | وب‌اپ آزمون دستی با ویرایش و خروجی Word/PDF (در Swagger نیست) |
 
 ### `app.py`
 - `STATIC_DIR`، `DESCRIPTION`، `TAGS`: مسیر فایل‌های ایستا، توضیح فارسی صفحه Swagger و توضیح گروه‌ها.
@@ -353,14 +356,15 @@
 - `ocr(file, lexicon, max_pages)`: `POST /ocr`. فایل را ذخیره، پردازش و نام اصلی (نه نام موقت) را در `file` می‌گذارد. `max_pages` بین ۰ تا ۵۰۰.
 - `ocr_text(...)`: `POST /ocr/text`؛ `text_dedup` هر صفحه و متن یکپارچه.
 - `ocr_review(...)`: `POST /ocr/review`؛ HTML مرور انسانی. ساخت HTML **داخل** بلوک `saved_upload` است چون پیش‌نمایش تصویر صفحه از فایل موقت گرفته می‌شود. هدر `Content-Disposition: inline` با نام `<stem>.html` می‌فرستد.
-- `DownloadFormat`: enum قالب‌ها (`txt`، `json`، `html`، `zip`)؛ قالب نامعتبر ⇒ ۴۲۲ و فایلی روی دیسک نمی‌ماند.
+- `DownloadFormat`: enum قالب‌ها (`txt`، `json`، `html`، `docx`، `zip`)؛ قالب نامعتبر ⇒ ۴۲۲ و فایلی روی دیسک نمی‌ماند.
 - `ocr_download(file, format, lexicon, max_pages)`: `POST /ocr/download`. خروجی را **داخل** `saved_upload` می‌سازد و با `Content-Disposition: attachment` و نام `<stem>.<قالب>` برمی‌گرداند. `POST /ocr` هم هدر `inline` با `<stem>.json` دارد.
 
 ### `routes/webapp.py` و `static/app.html`
 وب‌اپ آزمون دستی روی `/app`؛ هر دو route با `include_in_schema=False` (در Swagger و `/openapi.json` نمی‌آیند).
 - `app_page()`: `GET /app`؛ فایل `static/app.html` را می‌دهد (بدون کلید API، چون داده‌ای ندارد؛ `Cache-Control: no-store`).
 - `run(file, lexicon=False, max_pages=0, tables=True)`: `POST /app/run` (در صفحه: تیک «جدول و فاکتور»، پیش‌فرض روشن) با `require_api_key`. فایل را با `saved_upload` می‌گیرد، `run_ocr` اجرا می‌کند و **داخل** بلوک آپلود با `evaluation.dashboard.build_doc` همان ساختار داشبورد را می‌سازد (تصویر صفحه base64، متن هایلایت‌شده، یادداشت‌ها، فاکتور، آمار؛ بدون GT). نام سند را با `output_stem` (نام فایل ورودی بدون پسوند) جایگزین نام موقت می‌کند. پاسخ: `{doc, txt, json}`؛ `txt` و `json` همان `render_text`/`render_json`ِ دانلود هستند. `lexicon` پیش‌فرضش **false** است (برخلاف `/ocr`) تا دقت واقعی دیده شود. **وابستگی:** این route از بسته‌ی `evaluation` (در همین ریشه‌ی مخزن) import می‌کند؛ اگر روزی `api/` جدا بسته‌بندی شود، `build_doc`/`Marker`/`render_html` باید به `persian_ocr/report/` بروند.
-- `app.html` (یک فایل، بدون CDN و کتابخانه): صف چندفایلی (انداختن، انتخاب یا paste تصویر)، پردازش **یکی‌یکی** با `fetch`، وضعیت هر فایل (در صف / در حال پردازش با شمارنده‌ی ثانیه / تمام / خطا)، پیام خطای سرور یا «اتصال برقرار نشد»، نمایشگر مثل داشبورد (تصویر قابل چرخش ۹۰/۱۸۰ و zoom کنار خروجی، چرخش هر صفحه جدا، هایلایت، اندازه‌ی متن، حالت تمرکز، میان‌برهای `←/→ R F + -`)، دانلود `txt`/`json` با نام فایل ورودی (ساخته‌شده در مرورگر، بدون درخواست دوم)، حذف از صف. گزینه‌ها: دیکشنری سازمان، حداکثر صفحه، و فیلد کلید API که فقط وقتی `/health` بگوید `auth_required` ظاهر می‌شود. گزینه‌ها (و کلید) در `localStorage` می‌مانند. HTML خروجی سرور از قبل escape شده است (`html.escape` در `render_html`/`page_notes`)؛ نام فایل در مرورگر escape می‌شود.
+- `export_docx(body)`: `POST /app/export` با `require_api_key`؛ متن ویرایش‌شده‌ی کل صفحه‌ها (`{name, pages}`) را بدون اجرای دوباره‌ی OCR با `build_docx` به فایل `.docx` تبدیل و با نام اصلی دانلود می‌کند.
+- `app.html` (یک فایل، بدون CDN و کتابخانه): صف چندفایلی (انداختن، انتخاب یا paste تصویر)، پردازش **یکی‌یکی** با `fetch`، وضعیت هر فایل، نمایشگر کنار تصویر (چیدمان صفحه، متن پیوسته، و **ویرایش متن** هم در `#pageEditor` با بازگردانی اصل و هم کلیک مستقیم روی کادرهای چیدمان)، دانلود **کل صفحه‌ها** با ویرایش‌ها به‌صورت `txt`، `json`، `Word (.docx)` و `PDF` (پنجره‌ی چاپ A4 با همه‌ی صفحه‌ها)، و دانلود چیدمان HTML صفحه‌ی فعلی. گزینه‌ها (و کلید) در `localStorage` می‌مانند.
 
 ### `routes/validate.py`
 - `_check(kind, value)`: `correct_by_checksum` را به `ChecksumResponse` تبدیل می‌کند؛ `valid` یعنی `status == "valid"`.

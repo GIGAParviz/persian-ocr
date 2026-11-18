@@ -2,16 +2,18 @@ import base64
 from pathlib import Path
 
 import cv2
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 
 from evaluation.dashboard import build_doc
 
 from ...config import PreprocessMode
-from ..layout import build_layout
+from ...report import DOCX_MIME, build_docx
 from ...report.files import render_json, render_text
 from ..deps import require_api_key
-from ..downloads import output_stem
+from ..downloads import clean_stem, content_disposition, output_stem
+from ..layout import build_layout
 from ..uploads import original_name, saved_upload
 from .ocr import run_ocr
 
@@ -59,3 +61,20 @@ def run(
     doc["name"] = output_stem(file)
     doc["file"] = result["file"]
     return {"doc": doc, "txt": render_text(result), "json": render_json(result)}
+
+
+class ExportPage(BaseModel):
+    page: int = Field(1, ge=1)
+    text: str = ""
+
+
+class ExportRequest(BaseModel):
+    name: str = "document"
+    pages: list[ExportPage] = Field(min_length=1, max_length=5000)
+
+
+@router.post("/export", dependencies=[Depends(require_api_key)])
+def export_docx(body: ExportRequest) -> Response:
+    stem = clean_stem(f"{body.name}.docx")
+    data = build_docx([{"page": p.page, "text": p.text} for p in body.pages])
+    return Response(content=data, media_type=DOCX_MIME, headers={"Content-Disposition": content_disposition(f"{stem}.docx")})

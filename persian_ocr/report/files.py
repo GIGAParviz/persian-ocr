@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from .docx import DOCX_MIME
 from .html import build_review_html
 
 MEDIA_TYPES = {
@@ -8,6 +9,7 @@ MEDIA_TYPES = {
     "json": "application/json",
     "html": "text/html; charset=utf-8",
     "zip": "application/zip",
+    "docx": DOCX_MIME,
 }
 
 

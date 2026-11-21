@@ -1,6 +1,6 @@
 FROM python:3.12-slim-trixie
 
-LABEL org.opencontainers.image.source="https://github.com/AI-Transformation-Team/OCR" \
+LABEL org.opencontainers.image.source="https://github.com/GIGAParviz/persian-ocr" \
       org.opencontainers.image.title="persian-ocr" \
       org.opencontainers.image.version="0.2.0"
 

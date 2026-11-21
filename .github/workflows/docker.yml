@@ -26,7 +26,7 @@ jobs:
           python -m unittest discover -s tests -t .
 
       - name: Build image
-        run: docker build -t persian-ocr:ci .
+        run: docker build --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" -t persian-ocr:ci .
 
       - name: Smoke test the running container
         run: |
@@ -44,9 +44,12 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/docs)" = "200"
           curl -sf -F "file=@deploy/test-invoice.png" "http://127.0.0.1:8000/ocr/text?lexicon=false" -o out.json
           curl -sf -F "file=@deploy/test-invoice.png" "http://127.0.0.1:8000/ocr/text?lexicon=false&tables=false" -o out_notables.json
-          python3 -c "import json; a=json.load(open('out.json'))['text']; b=json.load(open('out_notables.json'))['text']; print(len(a), len(b)); assert len(a) > 200 and len(b) > 200"
+          curl -sf -F "file=@deploy/test-invoice.png" "http://127.0.0.1:8000/app/run?lexicon=false" -o out_app.json
+          python3 -c "import json; a=json.load(open('out.json'))['text']; b=json.load(open('out_notables.json'))['text']; c=json.load(open('out_app.json'))['doc']['pages'][0]; print(len(a), len(b), len(c['layout']['items'])); assert len(a) > 200 and len(b) > 200 and len(c['layout']['items']) > 5; open('exp.json','w').write(json.dumps({'name':'test','pages':[{'page':1,'text':c['plain_text'],'layout':c['layout']}]}))"
+          curl -sf -X POST -H "Content-Type: application/json" -d @exp.json "http://127.0.0.1:8000/app/export?format=pdf" -o out.pdf
+          curl -sf -X POST -H "Content-Type: application/json" -d @exp.json "http://127.0.0.1:8000/app/export?format=docx" -o out.docx
+          python3 -c "assert open('out.pdf','rb').read(5)==b'%PDF-' and open('out.docx','rb').read(2)==b'PK'"
           docker logs ocr | tail -n 20
-
       - name: Push to GitHub Container Registry
         if: github.ref == 'refs/heads/main'
         run: |
